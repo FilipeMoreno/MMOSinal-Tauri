@@ -35,7 +35,8 @@
       "Bash(find /c/workspace/MMOSinalTauri/src/components -type f -name *.tsx)",
       "Bash(xargs grep:*)",
       "Bash(cargo add:*)",
-      "Bash(python3 -c \"import json,sys; json.load\\(sys.stdin\\); print\\(''''JSON válido''''\\)\")"
+      "Bash(python3 -c \"import json,sys; json.load\\(sys.stdin\\); print\\(''''JSON válido''''\\)\")",
+      "Bash(node:*)"
     ]
   }
 }
