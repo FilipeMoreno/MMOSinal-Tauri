@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i64\", name, audio_file_id, interrupt_mode, color_hex, sort_order, created_at\n         FROM panic_buttons WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "audio_file_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "interrupt_mode",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "color_hex",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "sort_order",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "12b8f22d974083f78fa1992fea1639d591e06f12b9613be94382a556e6d90e3b"
+}

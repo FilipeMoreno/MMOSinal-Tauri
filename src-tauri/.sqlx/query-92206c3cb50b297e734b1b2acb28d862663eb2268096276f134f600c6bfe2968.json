@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE holidays SET name = ?, date = ?, is_recurring = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "92206c3cb50b297e734b1b2acb28d862663eb2268096276f134f600c6bfe2968"
+}

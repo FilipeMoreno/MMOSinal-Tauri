@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE audio_playback_state SET position_ms = 0 WHERE audio_file_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "54c8ef386035580388d6753d7d7cb91e3536e0fa9e679f15f90577279636478d"
+}

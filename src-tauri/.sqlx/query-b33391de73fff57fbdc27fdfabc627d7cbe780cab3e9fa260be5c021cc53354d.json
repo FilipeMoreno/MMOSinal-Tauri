@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE panic_buttons SET name=?, audio_file_id=?, interrupt_mode=?, color_hex=? WHERE id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "b33391de73fff57fbdc27fdfabc627d7cbe780cab3e9fa260be5c021cc53354d"
+}

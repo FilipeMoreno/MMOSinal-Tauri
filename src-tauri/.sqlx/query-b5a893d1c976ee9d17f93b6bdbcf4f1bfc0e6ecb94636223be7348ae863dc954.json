@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO audio_playback_state (audio_file_id, position_ms, last_schedule_id, updated_at)\n         VALUES (?, ?, ?, datetime('now', 'localtime'))\n         ON CONFLICT(audio_file_id) DO UPDATE SET\n            position_ms = excluded.position_ms,\n            last_schedule_id = excluded.last_schedule_id,\n            updated_at = excluded.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "b5a893d1c976ee9d17f93b6bdbcf4f1bfc0e6ecb94636223be7348ae863dc954"
+}

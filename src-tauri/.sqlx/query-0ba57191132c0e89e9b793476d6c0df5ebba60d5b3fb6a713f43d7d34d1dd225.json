@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO schedules (name, time, days_of_week, folder_id, audio_file_id,\n                                play_duration_s, fade_in_s, fade_out_s, is_active)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "0ba57191132c0e89e9b793476d6c0df5ebba60d5b3fb6a713f43d7d34d1dd225"
+}

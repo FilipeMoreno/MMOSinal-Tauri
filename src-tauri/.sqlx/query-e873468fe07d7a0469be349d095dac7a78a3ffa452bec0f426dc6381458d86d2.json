@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE schedules SET name=?, time=?, days_of_week=?, folder_id=?, audio_file_id=?,\n         play_duration_s=?, fade_in_s=?, fade_out_s=?, is_active=?,\n         updated_at=datetime('now','localtime')\n         WHERE id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "e873468fe07d7a0469be349d095dac7a78a3ffa452bec0f426dc6381458d86d2"
+}

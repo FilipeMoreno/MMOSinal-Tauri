@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM audio_files WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a5ed7c4ebe0fcabf02a35fbafc04744e0547a98cd3e1359f80112b102102ed66"
+}

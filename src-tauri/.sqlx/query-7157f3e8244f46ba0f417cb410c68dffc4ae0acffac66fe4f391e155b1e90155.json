@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO audio_files (folder_id, name, filename, file_path, duration_ms, sort_order)\n         VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "7157f3e8244f46ba0f417cb410c68dffc4ae0acffac66fe4f391e155b1e90155"
+}

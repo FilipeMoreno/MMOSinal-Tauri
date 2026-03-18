@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE schedules SET is_active = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c712f3e86389b7ba28995d947f445b994f0a4828d313c6ba1bee6fa3c84d512f"
+}

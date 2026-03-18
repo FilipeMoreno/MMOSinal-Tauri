@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE audio_files SET sort_order = ? WHERE id = ? AND folder_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "b0501a36494af9afcb3427831b13791d4a5cebd967bffcdac1d68db089f5fd62"
+}

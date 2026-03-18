@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO holidays (name, date, is_recurring) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "dd943a355ea18587e95e242eea041df030f3f5ff28a1ccc6b6e9113ce01568ce"
+}

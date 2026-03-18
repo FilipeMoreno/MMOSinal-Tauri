@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"where cargo 2>&1\")",
+      "Bash(cmd.exe /c \"where rustc 2>&1\")",
+      "Bash(cmd.exe /c \"where rustup 2>&1\")",
+      "Bash(python3 -c \":*)",
+      "Bash(py:*)",
+      "Bash(DATABASE_URL=\"sqlite:./dev.db\" cargo sqlx prepare)",
+      "Bash(DATABASE_URL=\"sqlite:./dev.db\" cargo check)",
+      "Bash(DATABASE_URL=\"sqlite:./dev.db\" cargo sqlx prepare -- --lib 2>&1,)",
+      "Bash(cargo check:*)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill /F /IM mmo-sinal-tauri.exe)",
+      "Bash(cmd /c \"taskkill /F /IM node.exe 2>&1 & taskkill /F /IM mmo-sinal-tauri.exe 2>&1\")",
+      "Bash(cmd /c \"netstat -ano | findstr :1420\" 2>&1)",
+      "Bash(npm run:*)",
+      "Bash(cmd /c \"netstat -ano | findstr 1420\")",
+      "Bash(cmd /c \"netstat -a -n -o | findstr 1420\")",
+      "Bash(cmd /c \"netstat -a -n -o | findstr :1420\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 1420 | Select-Object -ExpandProperty OwningProcess\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(cmd /c \"taskkill /PID 27268 /F\")",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue')",
+      "Bash(powershell -Command 'Stop-Process -Id 27268 -Force' 2)",
+      "Bash(/dev/null sleep:*)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess\")",
+      "Bash(while read:*)",
+      "Bash(do cmd:*)",
+      "Bash(done)",
+      "Bash(powershell -Command \":*)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }\")",
+      "Bash(DATABASE_URL=\"sqlite:./dev.db\" cargo sqlx prepare -- --lib 2>&1)",
+      "Bash(find /c/workspace/MMOSinalTauri/src/components -type f -name *.tsx)",
+      "Bash(xargs grep:*)",
+      "Bash(cargo add:*)",
+      "Bash(python3 -c \"import json,sys; json.load\\(sys.stdin\\); print\\(''''JSON válido''''\\)\")"
+    ]
+  }
+}

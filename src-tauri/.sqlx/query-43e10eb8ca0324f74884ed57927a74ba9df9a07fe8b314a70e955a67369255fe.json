@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT audio_file_id as \"audio_file_id!: i64\", position_ms, last_schedule_id, updated_at\n         FROM audio_playback_state WHERE audio_file_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "audio_file_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "position_ms",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_schedule_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "43e10eb8ca0324f74884ed57927a74ba9df9a07fe8b314a70e955a67369255fe"
+}

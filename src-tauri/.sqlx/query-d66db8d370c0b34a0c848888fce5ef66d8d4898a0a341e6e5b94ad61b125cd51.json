@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO panic_buttons (name, audio_file_id, interrupt_mode, color_hex)\n         VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "d66db8d370c0b34a0c848888fce5ef66d8d4898a0a341e6e5b94ad61b125cd51"
+}

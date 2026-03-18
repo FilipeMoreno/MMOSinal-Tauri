@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM holidays WHERE substr(date,6) = ? AND is_recurring = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f69b4a9c912fc75607bc75dc8f25ae42b504fc67c9426c7e34e346d3f558b7a2"
+}

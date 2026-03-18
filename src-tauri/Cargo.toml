@@ -1,0 +1,59 @@
+[package]
+name = "mmo-sinal-tauri"
+version = "1.0.0"
+description = "Gerenciador de Sirenes Escolares"
+authors = ["MMO Sinal"]
+edition = "2021"
+
+[lib]
+name = "mmo_sinal_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-ico", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+
+# Serialização
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Banco de dados
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "chrono"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Data/hora
+chrono = { version = "0.4", features = ["serde"] }
+
+# Áudio
+rodio = { version = "0.20", default-features = false, features = ["mp3", "wav", "vorbis", "flac"] }
+symphonia = { version = "0.5", features = ["mp3", "aac", "aiff", "flac", "ogg", "wav"] }
+
+# Zip/Backup
+zip = "2"
+walkdir = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilitários
+anyhow = "1"
+thiserror = "1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+tauri-plugin-updater = "2.10.0"
+tauri-plugin-process = "2.3.1"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

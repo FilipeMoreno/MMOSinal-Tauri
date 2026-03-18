@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i64\", name, date, is_recurring as \"is_recurring: bool\", created_at\n           FROM holidays WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "date",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_recurring: bool",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3bb36409e5e3b0389463e32d45cd5f2fa5a9493977e1ccf6a97d662397cbdd43"
+}

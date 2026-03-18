@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM holidays WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ae5111af63a5f3eb0bd157bed6d1e79b10e312bd972c8c84f0e470b13fe3f2dc"
+}

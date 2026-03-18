@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO execution_logs\n         (schedule_id, audio_file_id, schedule_name, audio_name, trigger_type, status,\n          played_duration_ms, position_start_ms, error_message)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "6dd2b086a3d151100bc21fb893c8c26fb2b893b4d795ac8327ab309f0d88f5c1"
+}
