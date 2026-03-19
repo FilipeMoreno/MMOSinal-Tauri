@@ -7,6 +7,25 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.1] - 2026-03-19
+
+### Adicionado
+- Página **Sobre** unificada com informações do sistema, histórico de versões e licenças de bibliotecas.
+- Seleção múltipla e edição em lote de agendamentos (duração, fade, pasta, status).
+- Ações em lote na biblioteca de áudio: excluir selecionados e resetar posição.
+
+### Alterado
+- Página Sistema mesclada à página Sobre (três abas: Sistema, Histórico de Versões, Sobre & Licenças).
+- Ícone da aplicação substituído em toda a interface (sidebar, onboarding, cabeçalhos).
+- Subtítulo do app atualizado para "Gerenciador de Sinal Escolar".
+
+### Corrigido
+- Player aparecia no card de Sinal Manual durante reprodução de sinal agendado.
+- Travamento da aplicação ao remover dispositivo de áudio durante reprodução.
+- Ausência de áudio após reconexão de dispositivo de áudio no Windows (WASAPI).
+
+---
+
 ## [1.2.0] - 2026-03-19
 
 ### Adicionado
