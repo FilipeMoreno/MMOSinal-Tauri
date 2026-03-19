@@ -9,7 +9,7 @@ use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::core::audio_state::{PlayerState, PlayerStatus, SharedPlayerState};
 use crate::db::models::audio::AudioFile;
@@ -78,7 +78,7 @@ impl PlayerEngine {
     /// If `folder_id` is provided and the file ends before `duration_s` elapses, the
     /// engine automatically chains to the next file in the folder using the remaining time.
     pub async fn play(
-        &self,
+        &mut self,
         file: AudioFile,
         schedule: Option<Schedule>,
         folder_id: Option<i64>,
@@ -121,7 +121,46 @@ impl PlayerEngine {
         let file_buf = BufReader::new(File::open(path)?);
         let source = Decoder::new(file_buf).map_err(|e| AppError::Audio(e.to_string()))?;
 
-        let sink = Sink::try_new(&self.stream_handle).map_err(|e| AppError::Audio(e.to_string()))?;
+        // Always reinit the output stream before playing so that a device that was
+        // disconnected and reconnected is picked up correctly. On Windows/WASAPI the
+        // old OutputStreamHandle can appear valid but produce no audio after a reconnect.
+        if let Ok((new_stream, new_handle)) = OutputStream::try_default() {
+            self._stream = SendStream(new_stream);
+            self.stream_handle = new_handle;
+        }
+
+        // Try to create sink; if it fails the audio device may have disconnected.
+        // Attempt to reinitialise the output stream once before giving up.
+        let sink = match Sink::try_new(&self.stream_handle) {
+            Ok(s) => s,
+            Err(_) => {
+                warn!("Audio device unavailable — attempting to reinitialise output stream");
+                match OutputStream::try_default() {
+                    Ok((new_stream, new_handle)) => {
+                        self._stream = SendStream(new_stream);
+                        self.stream_handle = new_handle;
+                        Sink::try_new(&self.stream_handle)
+                            .map_err(|e| AppError::Audio(format!("Dispositivo de áudio indisponível: {e}")))?
+                    }
+                    Err(e) => {
+                        let err_msg = format!("Dispositivo de áudio não encontrado: {e}");
+                        warn!("{}", err_msg);
+                        // Fire-and-forget log: we must not .await while holding &mut self
+                        // (PlayerEngine contains !Sync fields that make the future non-Send).
+                        let (pool_c, sid, fid, sname, fname, spos, emsg) = (
+                            pool.clone(), schedule_id, file.id,
+                            schedule_name.clone(), file.name.clone(),
+                            saved_pos, err_msg.clone(),
+                        );
+                        tokio::spawn(async move {
+                            log_execution_fn(&pool_c, sid, fid, sname, fname,
+                                "scheduled", "error", 0, spos, Some(emsg)).await;
+                        });
+                        return Err(AppError::Audio(err_msg));
+                    }
+                }
+            }
+        };
         sink.set_volume(if fade_in_s > 0 { 0.0 } else { volume });
         sink.append(source);
         if saved_pos > 0 {
@@ -190,6 +229,9 @@ impl PlayerEngine {
             let mut current_pos_start = saved_pos;
             let mut seg_start = overall_start;
             let mut tick: u32 = 0;
+            // Set to true when a device error is detected and already logged,
+            // so the cleanup block does not emit a duplicate success/interrupted log.
+            let mut device_error_logged = false;
 
             // ── Main play loop ────────────────────────────────────────────────
             'play_loop: loop {
@@ -204,8 +246,35 @@ impl PlayerEngine {
                     None => break, // stop() was called
                 };
 
-                // File ended naturally before schedule duration
+                // File ended before schedule duration — or device disconnected
                 if cur_sink.empty() {
+                    // Distinguish natural end-of-file from device failure:
+                    // if we cannot create a new sink the output device is gone.
+                    // Use spawn_blocking + timeout to avoid freezing the async task when
+                    // the audio driver hangs on Windows after a device removal.
+                    let sh = stream_handle_clone.clone();
+                    let device_gone = tokio::time::timeout(
+                        Duration::from_millis(500),
+                        tokio::task::spawn_blocking(move || Sink::try_new(&sh).is_err()),
+                    ).await.unwrap_or(Ok(true)).unwrap_or(true);
+
+                    if device_gone {
+                        let seg_ms = seg_start.elapsed().as_millis() as i64;
+                        warn!(
+                            "Audio device disconnected during playback of '{}' (played {}ms)",
+                            current_file.name, seg_ms
+                        );
+                        log_execution_fn(
+                            &pool_clone, schedule_id, current_file.id,
+                            schedule_name.clone(), current_file.name.clone(),
+                            if schedule_id.is_some() { "scheduled" } else { "manual" },
+                            "error", seg_ms, current_pos_start,
+                            Some("Dispositivo de áudio desconectado ou indisponível".to_string()),
+                        ).await;
+                        device_error_logged = true;
+                        break 'play_loop;
+                    }
+
                     // Mark this file as fully played so next_file_for_folder skips it
                     let _ = audio_repo::upsert_playback_state(
                         &pool_clone,
@@ -291,6 +360,37 @@ impl PlayerEngine {
                 }
 
                 tick += 1;
+
+                // ── Device health check every ~1 s ───────────────────────────
+                // sink.empty() does NOT become true on device disconnect; the
+                // source queue still has data. Probe the stream handle directly.
+                // Use spawn_blocking + timeout so the check cannot freeze the
+                // async task if the Windows audio driver hangs after removal.
+                if tick % 10 == 0 {
+                    let sh = stream_handle_clone.clone();
+                    let device_gone = tokio::time::timeout(
+                        Duration::from_millis(500),
+                        tokio::task::spawn_blocking(move || Sink::try_new(&sh).is_err()),
+                    ).await.unwrap_or(Ok(true)).unwrap_or(true);
+
+                    if device_gone {
+                        let seg_ms = seg_start.elapsed().as_millis() as i64;
+                        warn!(
+                            "Audio device disconnected during playback of '{}' (played {}ms)",
+                            current_file.name, seg_ms
+                        );
+                        log_execution_fn(
+                            &pool_clone, schedule_id, current_file.id,
+                            schedule_name.clone(), current_file.name.clone(),
+                            if schedule_id.is_some() { "scheduled" } else { "manual" },
+                            "error", seg_ms, current_pos_start,
+                            Some("Dispositivo de áudio desconectado ou indisponível".to_string()),
+                        ).await;
+                        device_error_logged = true;
+                        break 'play_loop;
+                    }
+                }
+
                 if tick % 5 == 0 {
                     emit_state_fn(&state_clone, &app_clone).await;
                 }
@@ -305,18 +405,20 @@ impl PlayerEngine {
             if play_id_clone.load(Ordering::SeqCst) == my_play_id {
                 let was_interrupted = interrupted_clone.load(Ordering::SeqCst);
 
-                if !was_interrupted {
+                if !was_interrupted && !device_error_logged {
                     let _ = audio_repo::upsert_playback_state(
                         &pool_clone, current_file.id, final_position, schedule_id,
                     ).await;
                 }
 
-                let status = if was_interrupted { "interrupted" } else { "success" };
-                log_execution_fn(
-                    &pool_clone, schedule_id, current_file.id,
-                    schedule_name, current_file.name.clone(),
-                    "scheduled", status, seg_ms, current_pos_start, None,
-                ).await;
+                if !device_error_logged {
+                    let status = if was_interrupted { "interrupted" } else { "success" };
+                    log_execution_fn(
+                        &pool_clone, schedule_id, current_file.id,
+                        schedule_name, current_file.name.clone(),
+                        "scheduled", status, seg_ms, current_pos_start, None,
+                    ).await;
+                }
 
                 *play_params_clone.lock().await = None;
                 {

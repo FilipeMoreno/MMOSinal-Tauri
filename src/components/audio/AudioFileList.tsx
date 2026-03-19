@@ -218,6 +218,38 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
     }
   };
 
+  // ── Delete multiple files ────────────────────────────────────────────────
+  const handleBulkDelete = async () => {
+    if (!folderId) return;
+    const ids = Array.from(selectedIds);
+    if (!await confirm({ message: `Remover ${ids.length} arquivo(s) selecionado(s)?`, confirmLabel: "Remover" })) return;
+    try {
+      for (const fileId of ids) {
+        await audioService.deleteFile(fileId);
+        removeFile(folderId, fileId);
+      }
+      setSelectedIds(new Set());
+      toast.success(`${ids.length} arquivo(s) removido(s)`);
+      changeLogService.log("deleted", "audio_file", null, `${ids.length} arquivo(s)`);
+    } catch (e) {
+      toast.error(`Erro ao excluir: ${e}`);
+    }
+  };
+
+  // ── Reset playback for multiple files ────────────────────────────────────
+  const handleBulkResetState = async () => {
+    const ids = Array.from(selectedIds);
+    try {
+      for (const fileId of ids) {
+        await audioService.resetPlaybackState(fileId);
+      }
+      setSelectedIds(new Set());
+      toast.success(`Posição resetada para ${ids.length} arquivo(s)`);
+    } catch (e) {
+      toast.error(`Erro ao resetar: ${e}`);
+    }
+  };
+
   // ── Drag-reorder (within folder) ─────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, index: number, file: AudioFile) => {
     dragIndexRef.current = index;
@@ -327,6 +359,8 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
             <span className="text-sm text-slate-600 font-medium">
               {selectedIds.size} selecionado(s)
             </span>
+
+            {/* Mover para... */}
             <div className="relative">
               <Button
                 size="sm"
@@ -361,6 +395,29 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
                 </div>
               )}
             </div>
+
+            {/* Resetar posição */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5"
+              onClick={handleBulkResetState}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Resetar posição
+            </Button>
+
+            {/* Excluir */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Excluir
+            </Button>
+
             <Button
               size="sm"
               variant="ghost"

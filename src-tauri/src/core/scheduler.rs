@@ -84,7 +84,6 @@ pub async fn run_scheduler(
                 play_folder_id = Some(folder_id);
                 audio_repo::next_file_for_folder(&pool, folder_id).await
             } else {
-                play_folder_id = None;
                 warn!("Schedule {} has no file or folder configured", schedule.id);
                 // Log as error
                 let _ = log_repo::insert(&pool, &NewLog {
@@ -110,7 +109,7 @@ pub async fn run_scheduler(
                 .map(|s| s.default_volume)
                 .unwrap_or(1.0);
 
-            let eng = engine.lock().await;
+            let mut eng = engine.lock().await;
             let result = eng
                 .play(
                     file,

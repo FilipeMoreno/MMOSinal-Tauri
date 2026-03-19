@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useUpdater } from "@/hooks/useUpdater";
 import { usePlayerNotification } from "@/hooks/usePlayerNotification";
 import {
-  LayoutDashboard, Clock, Music2, CalendarOff, FileText, Settings, Bell, Radio,
-  ChevronLeft, ChevronRight, Info,
+  LayoutDashboard, Clock, Music2, CalendarOff, FileText, Settings, Radio,
+  ChevronLeft, ChevronRight, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +18,8 @@ const NAV_PRIMARY = [
 
 const NAV_SECONDARY = [
   { to: "/logs", label: "Logs", icon: FileText },
-  { to: "/system", label: "Sistema", icon: Info },
   { to: "/settings", label: "Configurações", icon: Settings },
+  { to: "/about", label: "Sobre", icon: BookOpen },
 ];
 
 function NavItem({
@@ -63,11 +62,15 @@ function NavItem({
 
 export function Layout() {
   const { initListener, status, current_file, current_schedule } = usePlayerStore();
-  const { checkForUpdates, dialog: updateDialog } = useUpdater();
+  const {
+    checkForUpdates, dialog: updateDialog,
+    hasUpdate, updateVersion,
+  } = useUpdater();
   const [version, setVersion] = useState("");
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebar-collapsed") === "true"
   );
+  const navigate = useNavigate();
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -77,7 +80,7 @@ export function Layout() {
 
   useEffect(() => {
     checkForUpdates(true);
-    getVersion().then(setVersion);
+    import("@tauri-apps/api/app").then(({ getVersion }) => getVersion().then(setVersion));
   }, []);
 
   usePlayerNotification();
@@ -107,13 +110,11 @@ export function Layout() {
         {/* Brand */}
         <div className={cn("py-5 border-b border-slate-100 transition-all duration-200", collapsed ? "px-2" : "px-4")}>
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-md">
-              <Bell className="h-5 w-5 text-white" />
-            </div>
+            <img src="/icon.png" alt="MMO Sinal" className="h-9 w-9 flex-shrink-0" />
             {!collapsed && (
               <div className="min-w-0">
                 <div className="font-bold text-sm text-slate-800 leading-tight">MMO Sinal</div>
-                <div className="text-xs text-slate-400 truncate">Gerenciador de Sirenes</div>
+                <div className="text-xs text-slate-400 truncate">Gerenciador de Sinal Escolar</div>
               </div>
             )}
           </div>
@@ -177,13 +178,29 @@ export function Layout() {
           </div>
         )}
 
-        {/* Version */}
-        <div className={cn("py-3 border-t border-slate-100 flex items-center transition-all duration-200", collapsed ? "justify-center px-2" : "justify-between px-4")}>
-          {!collapsed && (
-            <span className="text-xs text-slate-400">{version ? `v${version}` : ""}</span>
+        {/* Version / About shortcut */}
+        <button
+          onClick={() => navigate("/about")}
+          className={cn(
+            "py-3 border-t border-slate-100 flex items-center transition-all duration-200 w-full hover:bg-slate-50",
+            collapsed ? "justify-center px-2" : "justify-between px-4",
           )}
-          <div className="h-1.5 w-1.5 rounded-full bg-green-500" title="Online" />
-        </div>
+          title="Sobre o aplicativo"
+        >
+          {!collapsed && (
+            <span className={cn(
+              "text-xs",
+              hasUpdate ? "text-green-600 font-medium" : "text-slate-400",
+            )}>
+              {version ? `v${version}` : ""}
+              {hasUpdate && ` · v${updateVersion} disponível`}
+            </span>
+          )}
+          <div
+            className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", hasUpdate ? "bg-green-500 animate-pulse" : "bg-green-500")}
+            title={hasUpdate ? `v${updateVersion} disponível` : "Online"}
+          />
+        </button>
       </aside>
 
       {/* Main content */}

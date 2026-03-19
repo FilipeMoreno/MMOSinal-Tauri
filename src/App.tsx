@@ -8,7 +8,7 @@ import { AudioLibrary } from "@/pages/AudioLibrary";
 import { Holidays } from "@/pages/Holidays";
 import { Logs } from "@/pages/Logs";
 import { Settings } from "@/pages/Settings";
-import { SystemInfo } from "@/pages/SystemInfo";
+import { About } from "@/pages/About";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { settingsService } from "@/services/backupService";
 
@@ -42,7 +42,7 @@ export default function App() {
           <Route path="/holidays" element={<Holidays />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/system" element={<SystemInfo />} />
+          <Route path="/about" element={<About />} />
         </Route>
       </Routes>
     </BrowserRouter>

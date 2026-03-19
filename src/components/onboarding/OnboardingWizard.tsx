@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, ArrowRight, FolderOpen, Download, Volume2, Monitor, CheckCircle2 } from "lucide-react";
+import { ArrowRight, FolderOpen, Download, Volume2, Monitor, CheckCircle2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   enable as enableAutostart,
@@ -102,8 +102,8 @@ export function OnboardingWizard({ onComplete }: Props) {
         {/* Step: Welcome */}
         {step === "welcome" && (
           <div className="px-8 py-8 text-center space-y-6">
-            <div className="mx-auto h-20 w-20 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-200">
-              <Bell className="h-10 w-10 text-white" />
+            <div className="mx-auto h-20 w-20 rounded-2xl overflow-hidden shadow-lg shadow-blue-200">
+              <img src="/icon.png" alt="MMO Sinal" className="h-full w-full object-cover" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Bem-vindo ao MMO Sinal</h1>

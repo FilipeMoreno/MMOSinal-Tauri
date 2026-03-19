@@ -36,7 +36,15 @@
       "Bash(xargs grep:*)",
       "Bash(cargo add:*)",
       "Bash(python3 -c \"import json,sys; json.load\\(sys.stdin\\); print\\(''''JSON válido''''\\)\")",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(cargo sqlx:*)",
+      "Bash(sqlite3 dev.db \"CREATE TABLE IF NOT EXISTS change_logs \\(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_name TEXT, details TEXT, created_at TEXT NOT NULL DEFAULT \\(datetime\\(''now'', ''localtime''\\)\\)\\);\")",
+      "Bash(sqlx database:*)",
+      "Bash(python init_db.py)",
+      "Bash(python3 init_db.py)",
+      "Bash(npx tsc:*)",
+      "Bash(python -c \":*)",
+      "Bash(npx tauri:*)"
     ]
   }
 }

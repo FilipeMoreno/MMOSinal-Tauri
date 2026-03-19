@@ -7,17 +7,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
+interface UpdateInfo {
+  version: string;
+  body: string | null | undefined;
+  install: () => Promise<void>;
+}
+
 export function useUpdater() {
-  const [updateInfo, setUpdateInfo] = useState<{
-    version: string;
-    body: string | null | undefined;
-    install: () => Promise<void>;
-  } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   const checkForUpdates = useCallback(async (silent = true) => {
+    setChecking(true);
     try {
       const update = await check();
+      setChecked(true);
       if (update?.available) {
         setUpdateInfo({
           version: update.version,
@@ -32,6 +38,8 @@ export function useUpdater() {
       }
     } catch (e) {
       if (!silent) toast.error(`Erro ao verificar atualizações: ${e}`);
+    } finally {
+      setChecking(false);
     }
   }, []);
 
@@ -58,11 +66,7 @@ export function useUpdater() {
           )}
         </DialogHeader>
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setUpdateInfo(null)}
-            disabled={installing}
-          >
+          <Button variant="outline" onClick={() => setUpdateInfo(null)} disabled={installing}>
             Agora não
           </Button>
           <Button onClick={handleInstall} disabled={installing}>
@@ -73,5 +77,15 @@ export function useUpdater() {
     </Dialog>
   ) : null;
 
-  return { checkForUpdates, dialog };
+  return {
+    checkForUpdates,
+    dialog,
+    checking,
+    checked,
+    hasUpdate: !!updateInfo,
+    updateVersion: updateInfo?.version ?? null,
+    installUpdate: handleInstall,
+    installing,
+    dismissUpdate: () => setUpdateInfo(null),
+  };
 }

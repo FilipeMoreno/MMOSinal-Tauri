@@ -44,7 +44,7 @@ pub async fn play_manual(
         .map(|s| s.default_volume)
         .unwrap_or(1.0);
 
-    let eng = state.engine.lock().await;
+    let mut eng = state.engine.lock().await;
     eng.play(file, None, None, duration_s, 0, 0, default_volume, &state.pool, &app).await
 }
 
