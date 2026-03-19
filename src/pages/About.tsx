@@ -195,7 +195,7 @@ export function About() {
   const [sysError, setSysError] = useState<string | null>(null);
 
   const { status, current_file, current_schedule } = usePlayerStore();
-  const { checkForUpdates, dialog: updateDialog, checking, checked, hasUpdate, updateVersion, installing, installUpdate, dismissUpdate } = useUpdater();
+  const { checkForUpdates, dialog: updateDialog, checking, checked, hasUpdate, updateVersion, installing, showUpdateDialog } = useUpdater();
 
   useEffect(() => {
     getVersion().then(setAppVersion);
@@ -262,7 +262,7 @@ export function About() {
         </div>
         <div className="flex-shrink-0">
           {hasUpdate ? (
-            <Button size="sm" onClick={() => installUpdate().then(dismissUpdate)} disabled={installing}
+            <Button size="sm" onClick={showUpdateDialog} disabled={installing}
               className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1.5">
               {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownCircle className="h-3 w-3" />}
               {installing ? "Instalando..." : `Instalar v${updateVersion}`}

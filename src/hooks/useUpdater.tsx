@@ -15,6 +15,7 @@ interface UpdateInfo {
 
 export function useUpdater() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -33,6 +34,7 @@ export function useUpdater() {
             await relaunch();
           },
         });
+        setDialogOpen(true);
       } else if (!silent) {
         toast.success("O aplicativo está atualizado.");
       }
@@ -67,8 +69,8 @@ export function useUpdater() {
     }
   };
 
-  const dialog = updateInfo ? (
-    <Dialog open onOpenChange={(o) => !o && !installing && setUpdateInfo(null)}>
+  const dialog = updateInfo && dialogOpen ? (
+    <Dialog open onOpenChange={(o) => !o && !installing && setDialogOpen(false)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Atualização disponível — v{updateInfo.version}</DialogTitle>
@@ -79,7 +81,7 @@ export function useUpdater() {
           )}
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setUpdateInfo(null)} disabled={installing}>
+          <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={installing}>
             Agora não
           </Button>
           <Button onClick={handleInstall} disabled={installing}>
@@ -99,6 +101,8 @@ export function useUpdater() {
     updateVersion: updateInfo?.version ?? null,
     installUpdate: handleInstall,
     installing,
-    dismissUpdate: () => setUpdateInfo(null),
+    // Abre o dialog novamente sem re-checar
+    dismissUpdate: () => setDialogOpen(false),
+    showUpdateDialog: () => setDialogOpen(true),
   };
 }

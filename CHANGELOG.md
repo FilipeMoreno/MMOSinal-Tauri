@@ -7,6 +7,15 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.9] - 2026-03-19
+
+### Corrigido
+- Fechar o diálogo de atualização ("Agora não") não apaga mais o indicador de atualização na sidebar e na página Sobre.
+- Botão "Instalar" na página Sobre reabre o diálogo em vez de instalar diretamente.
+- Estado "Atualizado" só aparece quando de fato não há atualização disponível.
+
+---
+
 ## [1.2.8] - 2026-03-19
 
 ### Corrigido
