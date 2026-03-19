@@ -28,18 +28,20 @@ function NavItem({
   icon: Icon,
   end,
   collapsed,
+  badge,
 }: {
   to: string;
   label: string;
   icon: React.ElementType;
   end?: boolean;
   collapsed: boolean;
+  badge?: boolean;
 }) {
   return (
     <NavLink
       to={to}
       end={end}
-      title={collapsed ? label : undefined}
+      title={collapsed ? (badge ? `${label} — atualização disponível` : label) : undefined}
       className={({ isActive }) =>
         cn(
           "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
@@ -52,8 +54,18 @@ function NavItem({
     >
       {({ isActive }) => (
         <>
-          <Icon className={cn("h-4 w-4 flex-shrink-0", isActive ? "text-white" : "text-slate-400")} />
-          {!collapsed && label}
+          <span className="relative flex-shrink-0">
+            <Icon className={cn("h-4 w-4", isActive ? "text-white" : "text-slate-400")} />
+            {badge && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-green-500 ring-1 ring-white animate-pulse" />
+            )}
+          </span>
+          {!collapsed && <span className="flex-1">{label}</span>}
+          {!collapsed && badge && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 leading-none">
+              novo
+            </span>
+          )}
         </>
       )}
     </NavLink>
@@ -134,7 +146,12 @@ export function Layout() {
           {collapsed && <div className="pt-4 pb-1" />}
 
           {NAV_SECONDARY.map((item) => (
-            <NavItem key={item.to} {...item} collapsed={collapsed} />
+            <NavItem
+              key={item.to}
+              {...item}
+              collapsed={collapsed}
+              badge={item.to === "/about" && hasUpdate}
+            />
           ))}
         </nav>
 

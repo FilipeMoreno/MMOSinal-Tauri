@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.7] - 2026-03-19
+
+### Adicionado
+- Sidebar: badge "novo" e dot animado no item "Sobre" quando há atualização disponível.
+
+### Corrigido
+- CI: `latest.json` gerado via Python para escapar corretamente as quebras de linha da assinatura minisign (corrige "invalid encoding in minisign data").
+
+---
+
 ## [1.2.6] - 2026-03-19
 
 ### Corrigido

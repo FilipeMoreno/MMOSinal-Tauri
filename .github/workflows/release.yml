@@ -56,53 +56,58 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          REPO="${GITHUB_REPOSITORY}"
-
           # Localizar o instalador NSIS gerado
           EXE_FILE=$(find src-tauri/target -name "*_x64-setup.exe" 2>/dev/null | head -1)
           if [ -z "$EXE_FILE" ]; then
             EXE_FILE=$(find src-tauri/target -name "*.exe" -path "*/nsis/*" 2>/dev/null | head -1)
           fi
-
           if [ -z "$EXE_FILE" ]; then
             echo "ERRO: instalador .exe não encontrado"
             find src-tauri/target -name "*.exe" 2>/dev/null
             exit 1
           fi
-
-          EXE_NAME=$(basename "$EXE_FILE")
-          SIG_FILE="${EXE_FILE}.sig"
-
           echo "Instalador: $EXE_FILE"
-          echo "Assinatura: $SIG_FILE"
-
+          SIG_FILE="${EXE_FILE}.sig"
           if [ ! -f "$SIG_FILE" ]; then
-            echo "AVISO: arquivo .sig não encontrado — TAURI_SIGNING_PRIVATE_KEY pode não estar configurado"
-            SIGNATURE=""
-          else
-            SIGNATURE=$(cat "$SIG_FILE")
+            echo "ERRO: .sig não encontrado — TAURI_SIGNING_PRIVATE_KEY pode não estar configurado"
+            exit 1
           fi
+          echo "Assinatura: $SIG_FILE"
+          export EXE_FILE
 
-          EXE_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/${EXE_NAME}"
-          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # Usar Python para gerar JSON válido (escapa newlines da assinatura corretamente)
+          python3 - <<'PYEOF'
+import json, os, sys
+from datetime import datetime, timezone
 
-          cat > latest.json << ENDJSON
-          {
-            "version": "${VERSION}",
-            "notes": "Veja o CHANGELOG para detalhes.",
-            "pub_date": "${PUB_DATE}",
-            "platforms": {
-              "windows-x86_64": {
-                "signature": "${SIGNATURE}",
-                "url": "${EXE_URL}"
-              }
-            }
-          }
-          ENDJSON
+ref_name = os.environ['GITHUB_REF_NAME']
+version  = ref_name.lstrip('v')
+repo     = os.environ['GITHUB_REPOSITORY']
 
-          echo "--- latest.json gerado ---"
-          cat latest.json
+exe_file = os.environ.get('EXE_FILE') or sys.exit("EXE_FILE não definido")
+sig_file = exe_file + '.sig'
+exe_name = os.path.basename(exe_file)
+exe_url  = f"https://github.com/{repo}/releases/download/{ref_name}/{exe_name}"
+signature = open(sig_file, 'r').read().strip()
+
+data = {
+    "version": version,
+    "notes": "Veja o CHANGELOG para detalhes.",
+    "pub_date": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    "platforms": {
+        "windows-x86_64": {
+            "signature": signature,
+            "url": exe_url,
+        }
+    }
+}
+
+with open('latest.json', 'w') as f:
+    json.dump(data, f, indent=2)
+
+print("--- latest.json gerado ---")
+print(open('latest.json').read())
+PYEOF
 
           # Publicar no release
           gh release upload "${GITHUB_REF_NAME}" latest.json --clobber
