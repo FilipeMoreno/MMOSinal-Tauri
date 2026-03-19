@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.5] - 2026-03-19
+
+### Corrigido
+- CI: `latest.json` agora é gerado manualmente no workflow, independente da versão do `tauri-action`.
+
+---
+
 ## [1.2.4] - 2026-03-19
 
 ### Corrigido
