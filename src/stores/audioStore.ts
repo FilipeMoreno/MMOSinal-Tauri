@@ -17,6 +17,8 @@ interface AudioStore {
   addFiles: (folderId: number, files: AudioFile[]) => void;
   removeFile: (folderId: number, fileId: number) => void;
   setFiles: (folderId: number, files: AudioFile[]) => void;
+  moveFile: (fileId: number, sourceFolderId: number, targetFolderId: number, updatedFile: AudioFile) => void;
+  renameFileInStore: (folderId: number, fileId: number, name: string) => void;
 }
 
 export const useAudioStore = create<AudioStore>((set) => ({
@@ -81,5 +83,28 @@ export const useAudioStore = create<AudioStore>((set) => ({
   setFiles: (folderId, files) =>
     set((state) => ({
       files: { ...state.files, [folderId]: files },
+    })),
+
+  moveFile: (fileId, sourceFolderId, targetFolderId, updatedFile) =>
+    set((state) => {
+      const sourceFiles = (state.files[sourceFolderId] ?? []).filter((f) => f.id !== fileId);
+      const targetFiles = [...(state.files[targetFolderId] ?? []), updatedFile];
+      return {
+        files: {
+          ...state.files,
+          [sourceFolderId]: sourceFiles,
+          [targetFolderId]: targetFiles,
+        },
+      };
+    }),
+
+  renameFileInStore: (folderId, fileId, name) =>
+    set((state) => ({
+      files: {
+        ...state.files,
+        [folderId]: (state.files[folderId] ?? []).map((f) =>
+          f.id === fileId ? { ...f, name } : f
+        ),
+      },
     })),
 }));

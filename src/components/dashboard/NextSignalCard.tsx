@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Bell, Music, Folder, Clock } from "lucide-react";
+import { Bell, BellOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { DAY_NAMES, formatSecondsToDisplay } from "@/lib/utils";
 
 export function NextSignalCard() {
   const { nextSignal, fetchNextSignal } = useScheduleStore();
@@ -31,67 +29,54 @@ export function NextSignalCard() {
     return `${s}s`;
   };
 
+  const isUrgent = countdown > 0 && countdown <= 300;
+
   if (!nextSignal) {
     return (
-      <Card className="border-slate-200">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Bell className="h-5 w-5 text-slate-400" />
-            <span className="text-sm text-slate-500 uppercase tracking-wider">Próximo Sinal</span>
+      <Card className="border-dashed border-2 border-slate-200 bg-slate-50">
+        <CardContent className="p-6 flex flex-col items-center justify-center min-h-[172px] text-center gap-2">
+          <div className="h-11 w-11 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+            <BellOff className="h-5 w-5 text-slate-400" />
           </div>
-          <p className="text-slate-400 text-sm">Nenhum sinal agendado</p>
+          <p className="text-sm font-medium text-slate-600">Próximo Sinal</p>
+          <p className="text-xs text-slate-400">Nenhum agendamento ativo</p>
         </CardContent>
       </Card>
     );
   }
 
-  const { schedule, audio_file, folder } = nextSignal;
+  const { schedule } = nextSignal;
+  const label = schedule.name?.trim() || null;
+
+  const gradientClass = isUrgent
+    ? "bg-gradient-to-br from-orange-500 to-orange-600 border-orange-400"
+    : "bg-gradient-to-br from-blue-600 to-blue-700 border-blue-500";
+  const mutedClass = isUrgent ? "text-orange-200" : "text-blue-200";
 
   return (
-    <Card className="bg-gradient-to-br from-blue-600 to-blue-700 border-blue-500 text-white">
-      <CardContent className="p-6">
-        <div className="flex items-center gap-3 mb-3">
-          <Bell className="h-5 w-5 text-blue-200" />
-          <span className="text-sm text-blue-200 uppercase tracking-wider">Próximo Sinal</span>
+    <Card className={`border text-white overflow-hidden ${gradientClass}`}>
+      <CardContent className="p-6 flex flex-col justify-between h-full min-h-[172px]">
+        <div className="flex items-center gap-2">
+          <Bell className={`h-4 w-4 ${mutedClass}`} />
+          <span className={`text-xs uppercase tracking-widest font-medium ${mutedClass}`}>Próximo Sinal</span>
+          {isUrgent && (
+            <span className="ml-auto text-xs bg-white/20 rounded-full px-2 py-0.5 font-medium">Em breve!</span>
+          )}
         </div>
 
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <h3 className="text-xl font-bold">{schedule.name || schedule.time}</h3>
-            <div className="flex items-center gap-2 mt-1">
-              <Clock className="h-4 w-4 text-blue-200" />
-              <span className="text-2xl font-mono font-semibold">{schedule.time}</span>
+        <div className="flex items-end justify-between mt-4">
+          <div>
+            <div className="text-5xl font-mono font-bold tabular-nums leading-none">
+              {schedule.time}
             </div>
-
-            <div className="flex flex-wrap gap-1 mt-2">
-              {schedule.days_of_week.map((d) => (
-                <Badge key={d} variant="secondary" className="bg-blue-500/50 text-blue-100 border-0 text-xs">
-                  {DAY_NAMES[d]}
-                </Badge>
-              ))}
-            </div>
-
-            <div className="mt-2 flex items-center gap-2 text-sm text-blue-200">
-              {audio_file ? (
-                <>
-                  <Music className="h-4 w-4" />
-                  <span>{audio_file.name}</span>
-                </>
-              ) : folder ? (
-                <>
-                  <Folder className="h-4 w-4" />
-                  <span>{folder.name}</span>
-                </>
-              ) : null}
-            </div>
-            <div className="text-xs text-blue-300 mt-1">
-              Duração: {formatSecondsToDisplay(schedule.play_duration_s)}
-            </div>
+            {label && <p className={`text-sm mt-1.5 ${mutedClass}`}>{label}</p>}
           </div>
 
-          <div className="text-right ml-4">
-            <div className="text-xs text-blue-200 mb-1">Em</div>
-            <div className="text-3xl font-mono font-bold">{formatCountdown(countdown)}</div>
+          <div className="text-right">
+            <div className={`text-xs ${mutedClass} mb-0.5`}>em</div>
+            <div className="text-3xl font-mono font-bold tabular-nums leading-none">
+              {formatCountdown(countdown)}
+            </div>
           </div>
         </div>
       </CardContent>

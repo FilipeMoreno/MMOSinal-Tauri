@@ -7,12 +7,16 @@ export const audioService = {
     return invoke<AudioFolder[]>("list_audio_folders");
   },
 
-  async createFolder(name: string, description: string | null): Promise<AudioFolder> {
-    return invoke<AudioFolder>("create_audio_folder", { name, description });
+  async createFolder(name: string, description: string | null, shuffle = false): Promise<AudioFolder> {
+    return invoke<AudioFolder>("create_audio_folder", { name, description, shuffle });
   },
 
-  async updateFolder(id: number, name: string, description: string | null): Promise<AudioFolder> {
-    return invoke<AudioFolder>("update_audio_folder", { id, name, description });
+  async updateFolder(id: number, name: string, description: string | null, shuffle?: boolean): Promise<AudioFolder> {
+    return invoke<AudioFolder>("update_audio_folder", { id, name, description, shuffle: shuffle ?? null });
+  },
+
+  async toggleShuffle(id: number, shuffle: boolean): Promise<AudioFolder> {
+    return invoke<AudioFolder>("update_folder_shuffle", { id, shuffle });
   },
 
   async deleteFolder(id: number): Promise<void> {
@@ -38,5 +42,13 @@ export const audioService = {
 
   async resetPlaybackState(audioFileId: number): Promise<void> {
     return invoke<void>("reset_playback_state", { audioFileId });
+  },
+
+  async renameFile(id: number, name: string): Promise<AudioFile> {
+    return invoke<AudioFile>("rename_audio_file", { id, name });
+  },
+
+  async moveFile(fileId: number, targetFolderId: number): Promise<AudioFile> {
+    return invoke<AudioFile>("move_audio_file", { fileId, targetFolderId });
   },
 };

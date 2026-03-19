@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE audio_folders SET shuffle = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "aa352ea7abd05d5ae68a5153db2a3bfc92039ed3464fba63499f49cdf922cc5e"
+}

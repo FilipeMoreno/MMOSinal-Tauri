@@ -75,107 +75,99 @@ impl PlayerEngine {
     }
 
     /// Play an audio file for `duration_s` seconds, starting from its saved position.
-    /// Applies fade-in and fade-out.
+    /// If `folder_id` is provided and the file ends before `duration_s` elapses, the
+    /// engine automatically chains to the next file in the folder using the remaining time.
     pub async fn play(
         &self,
         file: AudioFile,
         schedule: Option<Schedule>,
+        folder_id: Option<i64>,
         duration_s: u64,
         fade_in_s: u64,
         fade_out_s: u64,
+        volume: f32,
         pool: &SqlitePool,
         app: &AppHandle,
     ) -> Result<()> {
-        let file_path = file.file_path.clone();
-        let file_id = file.id;
         let schedule_id = schedule.as_ref().map(|s| s.id);
 
         // Get saved position for resume feature.
-        // Resume from the last known position regardless of which schedule (or manual play)
-        // last touched this file — this is what enables sequential folder playback to advance
-        // continuously across multiple schedule triggers.
         let saved_pos = audio_repo::get_playback_state(pool, file.id)
             .await?
             .map(|s| s.position_ms)
             .unwrap_or(0);
 
-        let position_start_ms = saved_pos;
         let schedule_name = schedule.as_ref().map(|s| s.name.clone());
-        let audio_name = file.name.clone();
 
-        // Claim a new play slot — any previously running task will see its id is stale
-        // and skip the final state-reset, preventing it from stomping our new play.
+        // Claim a new play slot.
         let my_play_id = self.play_id.fetch_add(1, Ordering::SeqCst) + 1;
 
-        // Stop any currently playing audio and reset the interrupted flag for this new play.
         self.stop_sink().await;
         self.interrupted.store(false, Ordering::SeqCst);
-
-        // Store params for seek() to reuse.
         *self.play_params.lock().await = Some((duration_s, fade_out_s));
 
-        // Update initial state: FadingIn only if there is a fade-in, otherwise Playing.
+        // Validate file exists before setting up state
+        let file_path = file.file_path.clone();
+        let path = Path::new(&file_path);
+        if !path.exists() {
+            let err_msg = format!("Arquivo não encontrado: {file_path}");
+            self.log_execution(
+                pool, schedule_id, file.id, schedule_name, file.name.clone(),
+                "scheduled", "error", 0, saved_pos, Some(err_msg.clone()),
+            ).await;
+            return Err(AppError::Audio(err_msg));
+        }
+
+        let file_buf = BufReader::new(File::open(path)?);
+        let source = Decoder::new(file_buf).map_err(|e| AppError::Audio(e.to_string()))?;
+
+        let sink = Sink::try_new(&self.stream_handle).map_err(|e| AppError::Audio(e.to_string()))?;
+        sink.set_volume(if fade_in_s > 0 { 0.0 } else { volume });
+        sink.append(source);
+        if saved_pos > 0 {
+            let _ = sink.try_seek(Duration::from_millis(saved_pos as u64));
+        }
+        let sink = Arc::new(sink);
+        *self.sink.lock().await = Some(sink.clone());
+
+        // Update initial state
         {
             let mut st = self.state.lock().await;
             st.status = if fade_in_s > 0 { PlayerStatus::FadingIn } else { PlayerStatus::Playing };
             st.current_file = Some(file.clone());
             st.current_schedule = schedule.clone();
             st.position_ms = saved_pos;
-            st.volume = if fade_in_s > 0 { 0.0 } else { 1.0 };
+            st.volume = if fade_in_s > 0 { 0.0 } else { volume };
         }
         self.emit_state(app).await;
 
-        // Open audio file and seek to saved position
-        let path = Path::new(&file_path);
-        if !path.exists() {
-            let err_msg = format!("Arquivo não encontrado: {file_path}");
-            self.log_execution(
-                pool, schedule_id, file_id, schedule_name, audio_name,
-                "scheduled", "error", 0, position_start_ms, Some(err_msg.clone()),
-            ).await;
-            return Err(AppError::Audio(err_msg));
-        }
-
-        let file_buf = BufReader::new(File::open(path)?);
-        let source = Decoder::new(file_buf)
-            .map_err(|e| AppError::Audio(e.to_string()))?;
-
-        // Create new sink
-        let sink = Sink::try_new(&self.stream_handle)
-            .map_err(|e| AppError::Audio(e.to_string()))?;
-        sink.set_volume(if fade_in_s > 0 { 0.0 } else { 1.0 });
-        sink.append(source);
-
-        // Seek to resume position using codec-native seek (instantaneous, no frame decode).
-        if saved_pos > 0 {
-            let _ = sink.try_seek(Duration::from_millis(saved_pos as u64));
-        }
-
-        let sink = Arc::new(sink);
-        {
-            let mut s = self.sink.lock().await;
-            *s = Some(sink.clone());
-        }
-
-        // Clone handles for the async fade task
+        // Clones for the spawned task
         let sink_clone = sink.clone();
+        let sink_ref = self.sink.clone();
+        let stream_handle_clone = self.stream_handle.clone();
         let state_clone = self.state.clone();
         let pool_clone = pool.clone();
         let app_clone = app.clone();
         let interrupted_clone = self.interrupted.clone();
         let play_params_clone = self.play_params.clone();
         let play_id_clone = self.play_id.clone();
+        let target_volume = volume;
 
-        // Spawn the fade-in → play → fade-out → stop task
         tokio::spawn(async move {
-            let start_time = std::time::Instant::now();
+            let overall_start = std::time::Instant::now();
+            let total_duration = Duration::from_secs(duration_s);
+            let fade_out_start = if duration_s > fade_out_s {
+                Duration::from_secs(duration_s - fade_out_s)
+            } else {
+                Duration::ZERO
+            };
 
-            // ── Fade In ───────────────────────────────────────────────────────
+            // ── Fade In (first file only) ─────────────────────────────────────
             if fade_in_s > 0 {
-                let steps = (fade_in_s * 20) as u32; // 20 steps per second
+                let steps = (fade_in_s * 20) as u32;
                 for i in 0..=steps {
                     if sink_clone.is_paused() || sink_clone.empty() { break; }
-                    let vol = i as f32 / steps as f32;
+                    let vol = (i as f32 / steps as f32) * target_volume;
                     sink_clone.set_volume(vol);
                     {
                         let mut st = state_clone.lock().await;
@@ -185,43 +177,112 @@ impl PlayerEngine {
                     tokio::time::sleep(Duration::from_millis(50)).await;
                 }
             }
-
-            sink_clone.set_volume(1.0);
-
-            // ── Playing ───────────────────────────────────────────────────────
+            sink_clone.set_volume(target_volume);
             {
                 let mut st = state_clone.lock().await;
                 st.status = PlayerStatus::Playing;
-                st.volume = 1.0;
+                st.volume = target_volume;
             }
             emit_state_fn(&state_clone, &app_clone).await;
 
-            let play_duration = Duration::from_secs(duration_s);
-            let fade_out_start = if duration_s > fade_out_s {
-                Duration::from_secs(duration_s - fade_out_s)
-            } else {
-                Duration::ZERO
-            };
-
+            // ── Current-file tracking (changes on chain) ──────────────────────
+            let mut current_file = file;
+            let mut current_pos_start = saved_pos;
+            let mut seg_start = overall_start;
             let mut tick: u32 = 0;
-            loop {
-                let elapsed = start_time.elapsed();
 
-                if sink_clone.empty() { break; } // natural end of file
+            // ── Main play loop ────────────────────────────────────────────────
+            'play_loop: loop {
+                let elapsed_total = overall_start.elapsed();
 
-                if elapsed >= play_duration { break; }
+                // Schedule duration reached — stop
+                if elapsed_total >= total_duration { break; }
 
-                // Update position using get_pos() — accurate after try_seek too.
-                {
-                    let mut st = state_clone.lock().await;
-                    st.position_ms = sink_clone.get_pos().as_millis() as i64;
+                // Get the currently active sink (may have been replaced on chain)
+                let cur_sink = match sink_ref.lock().await.clone() {
+                    Some(s) => s,
+                    None => break, // stop() was called
+                };
+
+                // File ended naturally before schedule duration
+                if cur_sink.empty() {
+                    // Mark this file as fully played so next_file_for_folder skips it
+                    let _ = audio_repo::upsert_playback_state(
+                        &pool_clone,
+                        current_file.id,
+                        current_file.duration_ms.unwrap_or(i64::MAX),
+                        schedule_id,
+                    ).await;
+
+                    // Log this segment
+                    let seg_ms = seg_start.elapsed().as_millis() as i64;
+                    log_execution_fn(
+                        &pool_clone, schedule_id, current_file.id,
+                        schedule_name.clone(), current_file.name.clone(),
+                        "scheduled", "success", seg_ms, current_pos_start, None,
+                    ).await;
+
+                    // Chain to next file if there is enough time remaining and a folder
+                    let remaining_ms = total_duration
+                        .saturating_sub(elapsed_total)
+                        .as_millis() as u64;
+
+                    if remaining_ms > 500 {
+                        if let Some(fid) = folder_id {
+                            if let Some(next_f) = audio_repo::next_file_for_folder(&pool_clone, fid).await {
+                                let next_pos = audio_repo::get_playback_state(&pool_clone, next_f.id)
+                                    .await.ok().flatten()
+                                    .map(|s| s.position_ms)
+                                    .unwrap_or(0);
+
+                                if let Ok(f) = File::open(&next_f.file_path) {
+                                    if let Ok(src) = Decoder::new(BufReader::new(f)) {
+                                        if let Ok(new_sink) = Sink::try_new(&stream_handle_clone) {
+                                            new_sink.set_volume(target_volume);
+                                            new_sink.append(src);
+                                            if next_pos > 0 {
+                                                let _ = new_sink.try_seek(
+                                                    Duration::from_millis(next_pos as u64)
+                                                );
+                                            }
+                                            let new_sink = Arc::new(new_sink);
+                                            *sink_ref.lock().await = Some(new_sink);
+
+                                            {
+                                                let mut st = state_clone.lock().await;
+                                                st.current_file = Some(next_f.clone());
+                                                st.position_ms = next_pos;
+                                                st.status = PlayerStatus::Playing;
+                                                st.volume = target_volume;
+                                            }
+                                            emit_state_fn(&state_clone, &app_clone).await;
+
+                                            current_file = next_f;
+                                            current_pos_start = next_pos;
+                                            seg_start = std::time::Instant::now();
+                                            continue 'play_loop;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // No chaining possible — end session
+                    break 'play_loop;
                 }
 
-                // Begin fade out
-                if elapsed >= fade_out_start && fade_out_s > 0 {
-                    let fade_elapsed = elapsed - fade_out_start;
+                // Update position
+                {
+                    let mut st = state_clone.lock().await;
+                    st.position_ms = cur_sink.get_pos().as_millis() as i64;
+                }
+
+                // Fade out based on total elapsed time (applies at end of session)
+                if elapsed_total >= fade_out_start && fade_out_s > 0 {
+                    let fade_elapsed = elapsed_total - fade_out_start;
                     let vol = 1.0 - (fade_elapsed.as_secs_f32() / fade_out_s as f32).min(1.0);
-                    sink_clone.set_volume(vol);
+                    cur_sink.set_volume(vol);
                     {
                         let mut st = state_clone.lock().await;
                         st.status = PlayerStatus::FadingOut;
@@ -229,38 +290,32 @@ impl PlayerEngine {
                     }
                 }
 
-                // Emit position update to frontend every ~500 ms
                 tick += 1;
                 if tick % 5 == 0 {
                     emit_state_fn(&state_clone, &app_clone).await;
                 }
-
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
 
             // ── Cleanup ───────────────────────────────────────────────────────
-            // Read final position before stopping (get_pos() may be unreliable after stop).
             let final_position = state_clone.lock().await.position_ms;
-            sink_clone.stop();
-            let actual_duration_ms = start_time.elapsed().as_millis() as i64;
+            if let Some(s) = sink_ref.lock().await.take() { s.stop(); }
+            let seg_ms = seg_start.elapsed().as_millis() as i64;
 
-            // Only do state-reset work if we are still the active play.
-            // If play_id changed, a newer play/stop/seek already owns the state.
             if play_id_clone.load(Ordering::SeqCst) == my_play_id {
                 let was_interrupted = interrupted_clone.load(Ordering::SeqCst);
 
                 if !was_interrupted {
                     let _ = audio_repo::upsert_playback_state(
-                        &pool_clone, file_id, final_position, schedule_id,
+                        &pool_clone, current_file.id, final_position, schedule_id,
                     ).await;
                 }
 
                 let status = if was_interrupted { "interrupted" } else { "success" };
                 log_execution_fn(
-                    &pool_clone, schedule_id, file_id,
-                    schedule_name, audio_name,
-                    "scheduled", status,
-                    actual_duration_ms, position_start_ms, None,
+                    &pool_clone, schedule_id, current_file.id,
+                    schedule_name, current_file.name.clone(),
+                    "scheduled", status, seg_ms, current_pos_start, None,
                 ).await;
 
                 *play_params_clone.lock().await = None;
@@ -269,8 +324,7 @@ impl PlayerEngine {
                     *st = crate::core::audio_state::PlayerState::default();
                 }
                 emit_state_fn(&state_clone, &app_clone).await;
-
-                info!("Playback finished: file_id={file_id}, duration={actual_duration_ms}ms");
+                info!("Playback finished: file_id={}, seg_ms={seg_ms}", current_file.id);
             }
         });
 

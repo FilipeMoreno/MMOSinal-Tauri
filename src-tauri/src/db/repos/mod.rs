@@ -1,6 +1,7 @@
 pub mod audio_repo;
 pub mod schedule_repo;
 pub mod log_repo;
+pub mod change_log_repo;
 pub mod holiday_repo;
 pub mod panic_repo;
 pub mod settings_repo;

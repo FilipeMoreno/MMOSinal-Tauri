@@ -15,9 +15,10 @@ pub async fn list_audio_folders(state: State<'_, AppState>) -> Result<Vec<AudioF
 pub async fn create_audio_folder(
     name: String,
     description: Option<String>,
+    shuffle: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<AudioFolder> {
-    audio_repo::create_folder(&state.pool, &name, description.as_deref()).await
+    audio_repo::create_folder(&state.pool, &name, description.as_deref(), shuffle.unwrap_or(false)).await
 }
 
 #[tauri::command]
@@ -25,9 +26,25 @@ pub async fn update_audio_folder(
     id: i64,
     name: String,
     description: Option<String>,
+    shuffle: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<AudioFolder> {
-    audio_repo::update_folder(&state.pool, id, &name, description.as_deref()).await
+    // Preserve existing shuffle if not provided
+    let current_shuffle = if let Some(s) = shuffle {
+        s
+    } else {
+        audio_repo::get_folder(&state.pool, id).await?.map(|f| f.shuffle).unwrap_or(false)
+    };
+    audio_repo::update_folder(&state.pool, id, &name, description.as_deref(), current_shuffle).await
+}
+
+#[tauri::command]
+pub async fn update_folder_shuffle(
+    id: i64,
+    shuffle: bool,
+    state: State<'_, AppState>,
+) -> Result<AudioFolder> {
+    audio_repo::update_folder_shuffle(&state.pool, id, shuffle).await
 }
 
 #[tauri::command]
@@ -124,6 +141,42 @@ fn get_audio_duration(path: &str) -> Option<i64> {
     let sample_rate = params.sample_rate?;
 
     Some((n_frames as f64 / sample_rate as f64 * 1000.0) as i64)
+}
+
+#[tauri::command]
+pub async fn rename_audio_file(id: i64, name: String, state: State<'_, AppState>) -> Result<AudioFile> {
+    audio_repo::rename_file(&state.pool, id, &name).await
+}
+
+#[tauri::command]
+pub async fn move_audio_file(
+    file_id: i64,
+    target_folder_id: i64,
+    state: State<'_, AppState>,
+) -> Result<AudioFile> {
+    let file = audio_repo::get_file(&state.pool, file_id)
+        .await?
+        .ok_or_else(|| AppError::InvalidInput("Arquivo não encontrado".into()))?;
+
+    // Copy physical file to target folder directory
+    let dest_dir = state.audio_folder.join(target_folder_id.to_string());
+    std::fs::create_dir_all(&dest_dir)?;
+    let dest_path = dest_dir.join(&file.filename);
+    std::fs::copy(&file.file_path, &dest_path)?;
+
+    // Update DB
+    let updated = audio_repo::move_file(
+        &state.pool,
+        file_id,
+        target_folder_id,
+        &dest_path.display().to_string(),
+    )
+    .await?;
+
+    // Remove old file from disk
+    let _ = std::fs::remove_file(&file.file_path);
+
+    Ok(updated)
 }
 
 #[tauri::command]

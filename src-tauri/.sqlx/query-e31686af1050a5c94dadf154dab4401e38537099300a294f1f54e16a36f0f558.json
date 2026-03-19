@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO change_logs (action, entity_type, entity_name, details) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e31686af1050a5c94dadf154dab4401e38537099300a294f1f54e16a36f0f558"
+}

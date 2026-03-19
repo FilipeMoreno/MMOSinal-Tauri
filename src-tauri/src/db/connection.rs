@@ -25,8 +25,17 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     // Split by statement and execute each
     for stmt in sql.split(';') {
         let trimmed = stmt.trim();
-        if !trimmed.is_empty() {
-            sqlx::query(trimmed).execute(pool).await?;
+        if trimmed.is_empty() {
+            continue;
+        }
+        let result = sqlx::query(trimmed).execute(pool).await;
+        if let Err(e) = result {
+            // ALTER TABLE ADD COLUMN fails gracefully when column already exists
+            let msg = e.to_string();
+            if msg.contains("duplicate column name") || msg.contains("already exists") {
+                continue;
+            }
+            return Err(e.into());
         }
     }
     Ok(())

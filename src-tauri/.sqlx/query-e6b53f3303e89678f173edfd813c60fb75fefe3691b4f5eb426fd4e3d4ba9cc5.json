@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM panic_buttons",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "e6b53f3303e89678f173edfd813c60fb75fefe3691b4f5eb426fd4e3d4ba9cc5"
+}

@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name, time, days_of_week, folder_id, audio_file_id, play_duration_s, fade_in_s, fade_out_s, is_active FROM schedules",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "time",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "days_of_week",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "folder_id",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "audio_file_id",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "play_duration_s",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "fade_in_s",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "fade_out_s",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_active",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "72013518dcdc357ebb1df42901a02c52572df5c14084b496dc0aaa1a1a466d14"
+}

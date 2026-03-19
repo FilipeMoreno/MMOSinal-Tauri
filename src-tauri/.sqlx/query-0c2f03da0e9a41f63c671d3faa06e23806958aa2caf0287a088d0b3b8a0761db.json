@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO audio_folders (name, description, shuffle) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "0c2f03da0e9a41f63c671d3faa06e23806958aa2caf0287a088d0b3b8a0761db"
+}

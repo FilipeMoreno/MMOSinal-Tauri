@@ -1,24 +1,117 @@
-import { useEffect } from "react";
-import { Music, Trash2, RotateCcw, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Music, Trash2, RotateCcw, Upload, GripVertical, MoreVertical,
+  Edit2, FolderInput, Check, X, Shuffle, ArrowDownUp,
+} from "lucide-react";
 import { useConfirm } from "@/hooks/useConfirm";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAudioStore } from "@/stores/audioStore";
 import { audioService } from "@/services/audioService";
+import { changeLogService } from "@/services/changeLogService";
 import { formatDuration } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { AudioFile, AudioFolder } from "@/types";
 
-export function AudioFileList() {
-  const { selectedFolderId, files, addFiles, removeFile, fetchFiles } = useAudioStore();
+interface Props {
+  draggingFileId: number | null;
+  setDraggingFileId: (id: number | null) => void;
+  currentFolder: AudioFolder | null;
+}
+
+interface ContextMenu {
+  fileId: number;
+  x: number;
+  y: number;
+}
+
+interface MovePickerState {
+  fileId: number;
+  anchorX: number;
+  anchorY: number;
+}
+
+export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder }: Props) {
+  const {
+    selectedFolderId,
+    folders,
+    files,
+    addFiles,
+    removeFile,
+    fetchFiles,
+    setFiles,
+    moveFile: moveFileInStore,
+    renameFileInStore,
+    updateFolder,
+  } = useAudioStore();
   const { confirm, dialog } = useConfirm();
+
   const folderId = selectedFolderId;
   const folderFiles = folderId ? (files[folderId] ?? []) : [];
+
+  // ── Drag-reorder state ───────────────────────────────────────────────────
+  const dragIndexRef = useRef<number | null>(null);
+  // insertBefore: the item at this index gets the line drawn ABOVE it (insert before it)
+  const [insertBeforeIndex, setInsertBeforeIndex] = useState<number | null>(null);
+
+  // ── Multi-select state ───────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // ── Rename state ─────────────────────────────────────────────────────────
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  // ── Context menu state ───────────────────────────────────────────────────
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+
+  // ── Move picker state ────────────────────────────────────────────────────
+  const [movePicker, setMovePicker] = useState<MovePickerState | null>(null);
+  const [bulkMovePicker, setBulkMovePicker] = useState(false);
+  const bulkMoveButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close context menu + move picker when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-context-menu]")) {
+        setContextMenu(null);
+      }
+      if (!target.closest("[data-move-picker]") && !target.closest("[data-move-trigger]")) {
+        setMovePicker(null);
+        setBulkMovePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Reset selection when folder changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setRenamingId(null);
+    setContextMenu(null);
+    setMovePicker(null);
+  }, [folderId]);
 
   useEffect(() => {
     if (folderId) fetchFiles(folderId);
   }, [folderId, fetchFiles]);
 
+  // ── Shuffle toggle ───────────────────────────────────────────────────────
+  const handleToggleShuffle = async () => {
+    if (!currentFolder) return;
+    try {
+      const updated = await audioService.toggleShuffle(currentFolder.id, !currentFolder.shuffle);
+      updateFolder(updated);
+      toast.success(updated.shuffle ? "Modo aleatório ativado" : "Modo em ordem ativado");
+    } catch (e) {
+      toast.error(`Erro: ${e}`);
+    }
+  };
+
+  // ── Import ───────────────────────────────────────────────────────────────
   const handleImport = async () => {
     if (!folderId) return;
     const selected = await open({
@@ -31,102 +124,527 @@ export function AudioFileList() {
       const imported = await audioService.importFiles(folderId, paths);
       addFiles(folderId, imported);
       toast.success(`${imported.length} arquivo(s) importado(s)`);
+      changeLogService.log("imported", "audio_file", null, `${imported.length} arquivo(s) para a pasta`);
     } catch (e) {
       toast.error(`Erro ao importar: ${e}`);
     }
   };
 
+  // ── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = async (fileId: number, fileName: string) => {
     if (!folderId) return;
+    setContextMenu(null);
     if (!await confirm({ message: `Remover "${fileName}"?`, confirmLabel: "Remover" })) return;
     try {
       await audioService.deleteFile(fileId);
       removeFile(folderId, fileId);
+      setSelectedIds((prev) => { const s = new Set(prev); s.delete(fileId); return s; });
       toast.success("Arquivo removido");
+      changeLogService.log("deleted", "audio_file", fileName);
     } catch (e) {
       toast.error(`Erro: ${e}`);
     }
   };
 
+  // ── Reset playback ───────────────────────────────────────────────────────
   const handleResetState = async (fileId: number) => {
+    setContextMenu(null);
     try {
       await audioService.resetPlaybackState(fileId);
-      toast.success("Estado de reprodução resetado");
+      toast.success("Posição de reprodução resetada");
     } catch (e) {
       toast.error(`Erro: ${e}`);
     }
   };
 
+  // ── Rename ───────────────────────────────────────────────────────────────
+  const startRename = (file: AudioFile) => {
+    setContextMenu(null);
+    setRenamingId(file.id);
+    setRenameValue(file.name);
+  };
+
+  const commitRename = async () => {
+    if (!folderId || renamingId === null) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) { setRenamingId(null); return; }
+    try {
+      const oldName = folderFiles.find((f) => f.id === renamingId)?.name;
+      await audioService.renameFile(renamingId, trimmed);
+      renameFileInStore(folderId, renamingId, trimmed);
+      toast.success("Arquivo renomeado");
+      changeLogService.log("renamed", "audio_file", trimmed, oldName ? `Antes: ${oldName}` : null);
+    } catch (e) {
+      toast.error(`Erro ao renomear: ${e}`);
+    } finally {
+      setRenamingId(null);
+    }
+  };
+
+  // ── Move single file ─────────────────────────────────────────────────────
+  const handleMoveFile = async (fileId: number, sourceFolderId: number, targetFolderId: number) => {
+    setMovePicker(null);
+    setContextMenu(null);
+    if (sourceFolderId === targetFolderId) return;
+    try {
+      const file = folderFiles.find((f) => f.id === fileId);
+      const targetFolder = folders.find((f) => f.id === targetFolderId);
+      const updated = await audioService.moveFile(fileId, targetFolderId);
+      moveFileInStore(fileId, sourceFolderId, targetFolderId, updated);
+      toast.success("Arquivo movido");
+      changeLogService.log("moved", "audio_file", file?.name, `Para: ${targetFolder?.name ?? targetFolderId}`);
+    } catch (e) {
+      toast.error(`Erro ao mover: ${e}`);
+    }
+  };
+
+  // ── Move multiple files ──────────────────────────────────────────────────
+  const handleBulkMove = async (targetFolderId: number) => {
+    if (!folderId) return;
+    setBulkMovePicker(false);
+    if (folderId === targetFolderId) return;
+    const ids = Array.from(selectedIds);
+    try {
+      for (const fileId of ids) {
+        const updated = await audioService.moveFile(fileId, targetFolderId);
+        moveFileInStore(fileId, folderId, targetFolderId, updated);
+      }
+      setSelectedIds(new Set());
+      toast.success(`${ids.length} arquivo(s) movido(s)`);
+      const targetFolder = folders.find((f) => f.id === targetFolderId);
+      changeLogService.log("moved", "audio_file", null, `${ids.length} arquivo(s) para: ${targetFolder?.name ?? targetFolderId}`);
+    } catch (e) {
+      toast.error(`Erro ao mover: ${e}`);
+    }
+  };
+
+  // ── Drag-reorder (within folder) ─────────────────────────────────────────
+  const handleDragStart = (e: React.DragEvent, index: number, file: AudioFile) => {
+    dragIndexRef.current = index;
+    setDraggingFileId(file.id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(file.id));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    // Determine insert position: top half → insert before this row, bottom half → insert after
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const insertBefore = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+    setInsertBeforeIndex(insertBefore);
+  };
+
+  const handleDragEnd = () => {
+    dragIndexRef.current = null;
+    setInsertBeforeIndex(null);
+    setDraggingFileId(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const fromIndex = dragIndexRef.current;
+    const target = insertBeforeIndex;
+    dragIndexRef.current = null;
+    setInsertBeforeIndex(null);
+    setDraggingFileId(null);
+
+    if (fromIndex === null || target === null || !folderId) return;
+    // Normalize: inserting after fromIndex is same as inserting before fromIndex+1
+    const effectiveTarget = target > fromIndex ? target - 1 : target;
+    if (effectiveTarget === fromIndex) return;
+
+    const newList = [...folderFiles];
+    const [moved] = newList.splice(fromIndex, 1);
+    newList.splice(effectiveTarget, 0, moved);
+    setFiles(folderId, newList);
+
+    try {
+      await audioService.reorderFiles(folderId, newList.map((f) => f.id));
+    } catch (e) {
+      toast.error(`Erro ao reordenar: ${e}`);
+      fetchFiles(folderId);
+    }
+  };
+
+  // ── Checkbox select ──────────────────────────────────────────────────────
+  const toggleSelect = (fileId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === folderFiles.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(folderFiles.map((f) => f.id)));
+    }
+  };
+
+  // ── Context menu ─────────────────────────────────────────────────────────
+  const handleContextMenu = (e: React.MouseEvent, fileId: number) => {
+    e.preventDefault();
+    setMovePicker(null);
+    const menuW = 168;
+    const menuH = 160;
+    const x = Math.min(e.clientX, window.innerWidth - menuW - 8);
+    const y = Math.min(e.clientY, window.innerHeight - menuH - 8);
+    setContextMenu({ fileId, x, y });
+  };
+
+  const contextFile = contextMenu ? folderFiles.find((f) => f.id === contextMenu.fileId) : null;
+
+  // ── Other folders (for move picker) ─────────────────────────────────────
+  const otherFolders = folders.filter((f) => f.id !== folderId);
+
+  // ── Empty states ─────────────────────────────────────────────────────────
   if (!folderId) {
     return (
-      <div className="flex-1 flex items-center justify-center text-slate-400">
+      <div className="flex-1 flex items-center justify-center text-slate-400 bg-slate-50/50">
         <div className="text-center">
-          <Music className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Selecione uma pasta para ver os arquivos</p>
+          <Music className="h-12 w-12 mx-auto mb-3 opacity-20" />
+          <p className="font-medium text-slate-500">Selecione uma pasta</p>
+          <p className="text-sm mt-1">Escolha uma pasta na lateral para ver os arquivos</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col overflow-hidden relative">
       {dialog}
-      <div className="p-4 border-b flex items-center justify-between">
-        <span className="font-semibold text-slate-700">
-          {folderFiles.length} arquivo(s)
-        </span>
-        <Button size="sm" onClick={handleImport}>
-          <Upload className="h-4 w-4 mr-1" />
+
+      {/* ── Toolbar ───────────────────────────────────────────────────────── */}
+      <div className="px-4 py-2.5 border-b bg-white flex items-center justify-between flex-shrink-0 gap-2">
+        {selectedIds.size > 0 ? (
+          <div className="flex items-center gap-2 flex-1">
+            <span className="text-sm text-slate-600 font-medium">
+              {selectedIds.size} selecionado(s)
+            </span>
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                ref={bulkMoveButtonRef}
+                data-move-trigger
+                onClick={() => setBulkMovePicker((v) => !v)}
+              >
+                <FolderInput className="h-3.5 w-3.5" />
+                Mover para...
+              </Button>
+              {bulkMovePicker && (
+                <div
+                  data-move-picker
+                  className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+                >
+                  {otherFolders.length === 0 ? (
+                    <p className="text-xs text-slate-400 px-3 py-2">Nenhuma outra pasta</p>
+                  ) : (
+                    otherFolders.map((f) => (
+                      <button
+                        key={f.id}
+                        className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                        onClick={() => handleBulkMove(f.id)}
+                      >
+                        <FolderInput className="h-3.5 w-3.5 text-slate-400" />
+                        {f.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-slate-400"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Limpar
+            </Button>
+          </div>
+        ) : (
+          <span className="text-sm font-medium text-slate-600">
+            {folderFiles.length} arquivo(s)
+          </span>
+        )}
+        <button
+          onClick={handleToggleShuffle}
+          title={currentFolder?.shuffle ? "Modo aleatório (clique para ordenado)" : "Modo ordenado (clique para aleatório)"}
+          className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors flex-shrink-0 ${
+            currentFolder?.shuffle
+              ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
+              : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          {currentFolder?.shuffle ? (
+            <Shuffle className="h-3.5 w-3.5" />
+          ) : (
+            <ArrowDownUp className="h-3.5 w-3.5" />
+          )}
+          {currentFolder?.shuffle ? "Aleatório" : "Em ordem"}
+        </button>
+        <Button size="sm" onClick={handleImport} className="flex-shrink-0">
+          <Upload className="h-3.5 w-3.5 mr-1.5" />
           Importar
         </Button>
       </div>
 
+      {/* ── File list ─────────────────────────────────────────────────────── */}
       {folderFiles.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-slate-400">
           <div className="text-center">
-            <Upload className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>Nenhum arquivo. Clique em Importar.</p>
+            <Upload className="h-12 w-12 mx-auto mb-3 opacity-20" />
+            <p className="font-medium text-slate-500">Pasta vazia</p>
+            <p className="text-sm mt-1">Clique em Importar para adicionar arquivos de áudio</p>
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          {folderFiles.map((file, idx) => (
-            <div
-              key={file.id}
-              className="flex items-center gap-3 px-4 py-3 border-b hover:bg-slate-50 group"
-            >
-              <span className="text-xs text-slate-400 w-6 text-right">{idx + 1}</span>
-              <Music className="h-4 w-4 text-blue-500 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{file.name}</p>
-                <p className="text-xs text-slate-400 truncate">{file.filename}</p>
-              </div>
-              {file.duration_ms && (
-                <Badge variant="secondary" className="text-xs">
-                  {formatDuration(file.duration_ms)}
-                </Badge>
-              )}
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7"
-                  title="Resetar posição de reprodução"
-                  onClick={() => handleResetState(file.id)}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(file.id, file.name)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+        <div
+          className="flex-1 overflow-y-auto"
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setInsertBeforeIndex(null);
+            }
+          }}
+        >
+          {/* Column header */}
+          <div className="flex items-center px-4 py-1.5 border-b bg-slate-50 text-xs text-slate-400 font-medium select-none sticky top-0 z-10">
+            <div className="w-6 flex-shrink-0" />
+            <div className="w-6 flex-shrink-0 flex items-center">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded border-slate-300 cursor-pointer"
+                checked={selectedIds.size === folderFiles.length && folderFiles.length > 0}
+                onChange={toggleSelectAll}
+              />
             </div>
-          ))}
+            <div className="w-8 flex-shrink-0 text-right pr-2">#</div>
+            <div className="flex-1 pl-2">Nome</div>
+            <div className="w-16 text-right pr-4">Duração</div>
+            <div className="w-8" />
+          </div>
+
+          {folderFiles.map((file, idx) => {
+            const isSelected = selectedIds.has(file.id);
+            const isDraggingThis = draggingFileId === file.id;
+            const showIndicatorBefore = insertBeforeIndex === idx && dragIndexRef.current !== null && dragIndexRef.current !== idx;
+
+            return (
+              <div key={file.id}>
+                {/* Drop indicator line above */}
+                {showIndicatorBefore && (
+                  <div className="h-0.5 bg-blue-500 mx-4 rounded-full pointer-events-none" />
+                )}
+
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx, file)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onContextMenu={(e) => handleContextMenu(e, file.id)}
+                  className={cn(
+                    "flex items-center py-2.5 px-4 border-b border-slate-50 group transition-colors select-none",
+                    isSelected ? "bg-blue-50" : "hover:bg-slate-50",
+                    isDraggingThis && "opacity-40"
+                  )}
+                >
+                  {/* Drag handle */}
+                  <div className="w-6 flex-shrink-0 flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+
+                  {/* Checkbox */}
+                  <div className="w-6 flex-shrink-0 flex items-center">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-slate-300 cursor-pointer"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(file.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+
+                  {/* Number */}
+                  <div className="w-8 flex-shrink-0 text-right pr-2">
+                    <span className="text-xs text-slate-300 tabular-nums">{idx + 1}</span>
+                  </div>
+
+                  {/* Music icon */}
+                  <div className="h-7 w-7 rounded bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 ml-1">
+                    <Music className="h-3.5 w-3.5 text-blue-500" />
+                  </div>
+
+                  {/* Name + filename */}
+                  <div className="flex-1 min-w-0 pl-3">
+                    {renamingId === file.id ? (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          className="h-7 text-sm py-0 px-2 w-48"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          onBlur={commitRename}
+                        />
+                        <button
+                          className="p-1 rounded text-green-500 hover:bg-green-50"
+                          onMouseDown={(e) => { e.preventDefault(); commitRename(); }}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          className="p-1 rounded text-slate-400 hover:bg-slate-100"
+                          onMouseDown={(e) => { e.preventDefault(); setRenamingId(null); }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{file.filename}</p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Duration */}
+                  <div className="w-16 text-right pr-4 flex-shrink-0">
+                    {file.duration_ms && (
+                      <span className="text-xs font-mono text-slate-400">
+                        {formatDuration(file.duration_ms)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Actions (MoreVertical) */}
+                  <div className="w-8 flex-shrink-0 flex items-center justify-center">
+                    <div className="relative">
+                      <button
+                        data-move-trigger
+                        className={cn(
+                          "p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-opacity",
+                          (isSelected || contextMenu?.fileId === file.id)
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleContextMenu(e, file.id);
+                        }}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Drop indicator at end of list */}
+          {insertBeforeIndex === folderFiles.length && dragIndexRef.current !== null && (
+            <div className="h-0.5 bg-blue-500 mx-4 rounded-full pointer-events-none" />
+          )}
+        </div>
+      )}
+
+      {/* ── Context menu ──────────────────────────────────────────────────── */}
+      {contextMenu && contextFile && (
+        <div
+          data-context-menu
+          className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+            onClick={() => startRename(contextFile)}
+          >
+            <Edit2 className="h-3.5 w-3.5 text-slate-400" />
+            Renomear
+          </button>
+
+          {/* Mover para... inline sub-items */}
+          <div className="relative group/move">
+            <button
+              className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+              data-move-trigger
+              onClick={(e) => {
+                e.stopPropagation();
+                setMovePicker(
+                  movePicker?.fileId === contextFile.id
+                    ? null
+                    : (() => {
+                        const subMenuW = 168;
+                        const subMenuH = 120;
+                        const rightX = contextMenu.x + 164;
+                        const anchorX = rightX + subMenuW > window.innerWidth - 8
+                          ? contextMenu.x - subMenuW
+                          : rightX;
+                        const anchorY = Math.min(contextMenu.y + 30, window.innerHeight - subMenuH - 8);
+                        return { fileId: contextFile.id, anchorX, anchorY };
+                      })()
+                );
+              }}
+            >
+              <FolderInput className="h-3.5 w-3.5 text-slate-400" />
+              Mover para...
+            </button>
+          </div>
+
+          <div className="border-t border-slate-100 my-1" />
+
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+            onClick={() => handleResetState(contextFile.id)}
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
+            Resetar posição
+          </button>
+
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+            onClick={() => handleDelete(contextFile.id, contextFile.name)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Excluir
+          </button>
+        </div>
+      )}
+
+      {/* ── Move picker (folder chooser) ──────────────────────────────────── */}
+      {movePicker && folderId && (
+        <div
+          data-move-picker
+          className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+          style={{ top: movePicker.anchorY, left: movePicker.anchorX }}
+        >
+          {otherFolders.length === 0 ? (
+            <p className="text-xs text-slate-400 px-3 py-2">Nenhuma outra pasta</p>
+          ) : (
+            otherFolders.map((f) => (
+              <button
+                key={f.id}
+                className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                onClick={() => handleMoveFile(movePicker.fileId, folderId, f.id)}
+              >
+                <FolderInput className="h-3.5 w-3.5 text-slate-400" />
+                {f.name}
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>

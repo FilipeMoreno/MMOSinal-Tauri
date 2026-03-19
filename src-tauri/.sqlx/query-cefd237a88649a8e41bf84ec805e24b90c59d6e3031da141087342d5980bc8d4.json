@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name, date, is_recurring FROM holidays",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "date",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_recurring",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cefd237a88649a8e41bf84ec805e24b90c59d6e3031da141087342d5980bc8d4"
+}

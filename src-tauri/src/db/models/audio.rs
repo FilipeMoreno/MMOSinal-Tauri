@@ -5,6 +5,7 @@ pub struct AudioFolder {
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
+    pub shuffle: bool,
     pub created_at: String,
 }
 
