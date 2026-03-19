@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::atomic::Ordering;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -16,6 +17,17 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings> {
 #[tauri::command]
 pub async fn save_settings(settings: AppSettings, state: State<'_, AppState>) -> Result<()> {
     settings_repo::save(&state.pool, &settings).await
+}
+
+#[tauri::command]
+pub async fn set_kiosk_mode(
+    enabled: bool,
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    state.kiosk_mode.store(enabled, Ordering::Relaxed);
+    window.set_fullscreen(enabled).map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    Ok(())
 }
 
 // ── Export / Import ───────────────────────────────────────────────────────────

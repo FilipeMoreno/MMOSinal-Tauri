@@ -34,7 +34,10 @@ function parseChangelog(raw: string): ChangelogSection[] {
     const versionMatch = line.match(/^##\s+\[([^\]]+)\]\s*-\s*(.+)/);
     if (versionMatch) {
       currentGroup = null;
-      current = { version: versionMatch[1], date: versionMatch[2].trim(), groups: [] };
+      const rawDate = versionMatch[2].trim();
+      const [y, m, d] = rawDate.split("-");
+      const date = d && m && y ? `${d}/${m}/${y}` : rawDate;
+      current = { version: versionMatch[1], date, groups: [] };
       sections.push(current);
       continue;
     }
@@ -197,7 +200,7 @@ export function About() {
   useEffect(() => {
     getVersion().then(setAppVersion);
     getTauriVersion().then(setTauriVersion);
-    checkForUpdates(false);
+    checkForUpdates(true);
   }, []);
 
   const loadSystem = async () => {

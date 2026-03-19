@@ -155,6 +155,8 @@ export interface AppSettings {
   ntp_auto_sync: boolean;
   default_volume: number; // 0.0 - 1.0
   setup_complete: boolean;
+  kiosk_mode: boolean;
+  kiosk_start: boolean;
 }
 
 export interface ImportResult {

@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 use sqlx::SqlitePool;
 use tauri::{Emitter, Manager};
@@ -30,6 +30,8 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub db_path: PathBuf,
     pub audio_folder: PathBuf,
+    /// Whether kiosk mode is currently active (blocks window close)
+    pub kiosk_mode: Arc<AtomicBool>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -90,6 +92,9 @@ pub fn run() {
             let engine = PlayerEngine::new(shared_state)?;
             let engine = Arc::new(Mutex::new(engine));
 
+            // Shared kiosk flag — used by on_window_event (sync closure) and commands
+            let kiosk_arc = Arc::new(AtomicBool::new(settings.kiosk_mode));
+
             // Register AppState before any command invocation can happen.
             handle.manage(AppState {
                 pool: pool.clone(),
@@ -97,6 +102,7 @@ pub fn run() {
                 data_dir: data_dir.clone(),
                 db_path: db_path.clone(),
                 audio_folder: audio_folder.clone(),
+                kiosk_mode: kiosk_arc.clone(),
             });
 
             // Setup tray
@@ -106,6 +112,14 @@ pub fn run() {
             if settings.start_minimized {
                 if let Some(w) = handle.get_webview_window("main") {
                     let _ = w.hide();
+                }
+            }
+
+            // Apply kiosk mode on startup
+            if settings.kiosk_start {
+                kiosk_arc.store(true, Ordering::Relaxed);
+                if let Some(w) = handle.get_webview_window("main") {
+                    let _ = w.set_fullscreen(true);
                 }
             }
 
@@ -191,11 +205,13 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // Minimize to tray instead of closing
+        .on_window_event(move |window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                // In kiosk mode block close entirely; otherwise minimize to tray
+                if !window.app_handle().state::<AppState>().kiosk_mode.load(Ordering::Relaxed) {
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -248,6 +264,7 @@ pub fn run() {
             // Settings
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::set_kiosk_mode,
             commands::settings::export_config,
             commands::settings::import_config,
             // Time Sync

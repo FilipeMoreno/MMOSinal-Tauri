@@ -34,6 +34,12 @@ pub struct AppSettings {
     pub default_volume: f32,
     #[serde(default)]
     pub setup_complete: bool,
+    /// Trava a janela em tela cheia sem permitir fechar (modo quiosque)
+    #[serde(default)]
+    pub kiosk_mode: bool,
+    /// Ao iniciar, aplica automaticamente o modo quiosque
+    #[serde(default)]
+    pub kiosk_start: bool,
 }
 
 fn default_backup_interval() -> u32 { 24 }
@@ -51,6 +57,8 @@ impl Default for AppSettings {
             ntp_auto_sync: true,
             default_volume: 1.0,
             setup_complete: false,
+            kiosk_mode: false,
+            kiosk_start: false,
         }
     }
 }

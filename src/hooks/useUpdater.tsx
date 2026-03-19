@@ -37,7 +37,20 @@ export function useUpdater() {
         toast.success("O aplicativo está atualizado.");
       }
     } catch (e) {
-      if (!silent) toast.error(`Erro ao verificar atualizações: ${e}`);
+      const msg = String(e).toLowerCase();
+      const isUnavailable =
+        msg.includes("could not fetch") ||
+        msg.includes("no release") ||
+        msg.includes("404") ||
+        msg.includes("network") ||
+        msg.includes("failed to fetch");
+      if (!silent) {
+        if (isUnavailable) {
+          toast.info("Não foi possível verificar atualizações. Verifique sua conexão ou tente mais tarde.");
+        } else {
+          toast.error(`Erro ao verificar atualizações: ${e}`);
+        }
+      }
     } finally {
       setChecking(false);
     }

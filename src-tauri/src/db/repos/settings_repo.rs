@@ -20,6 +20,8 @@ pub async fn get(pool: &SqlitePool) -> Result<AppSettings> {
             "ntp_auto_sync"        => s.ntp_auto_sync = row.value == "true",
             "default_volume"       => s.default_volume = row.value.parse().unwrap_or(1.0),
             "setup_complete"       => s.setup_complete = row.value == "true",
+            "kiosk_mode"           => s.kiosk_mode = row.value == "true",
+            "kiosk_start"          => s.kiosk_start = row.value == "true",
             _ => {}
         }
     }
@@ -38,6 +40,8 @@ pub async fn save(pool: &SqlitePool, s: &AppSettings) -> Result<()> {
         ("ntp_auto_sync",         s.ntp_auto_sync.to_string()),
         ("default_volume",        s.default_volume.to_string()),
         ("setup_complete",        s.setup_complete.to_string()),
+        ("kiosk_mode",            s.kiosk_mode.to_string()),
+        ("kiosk_start",           s.kiosk_start.to_string()),
     ];
 
     for (key, value) in pairs {

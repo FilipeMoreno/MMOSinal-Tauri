@@ -7,6 +7,23 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.2] - 2026-03-19
+
+### Adicionado
+- Modo quiosque: trava o app em tela cheia impedindo fechamento, com opção de iniciar automaticamente nesse modo.
+- Personalização do instalador NSIS: idioma português, atalho na área de trabalho, pasta no Menu Iniciar, imagens com logo e cores da marca.
+
+### Corrigido
+- Verificação de atualizações não gerava `latest.json` no GitHub Actions (adicionado `updaterJsonPreferNsis: true`).
+- Erro "Could not fetch a valid release JSON" exibido como toast ao abrir a página Sobre.
+
+### Alterado
+- Página Sobre agora tem três abas: Sistema, Histórico de Versões e Sobre & Licenças.
+- Subtítulo do app atualizado para "Gerenciador de Sinal Escolar".
+- Datas do histórico de versões exibidas no formato DD/MM/AAAA.
+
+---
+
 ## [1.2.1] - 2026-03-19
 
 ### Adicionado

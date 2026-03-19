@@ -9,6 +9,8 @@ import {
   disable as disableAutostart,
   isEnabled as isAutostartEnabled,
 } from "@tauri-apps/plugin-autostart";
+import { invoke } from "@tauri-apps/api/core";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,7 +98,10 @@ export function Settings() {
     ntp_auto_sync: true,
     default_volume: 1.0,
     setup_complete: true,
+    kiosk_mode: false,
+    kiosk_start: false,
   });
+  const [savedKiosk, setSavedKiosk] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<TimeSyncResult | null>(null);
   const [saving, setSaving] = useState(false);
@@ -125,6 +130,7 @@ export function Settings() {
         ]);
         if (!mounted) return;
         setSettings({ ...savedSettings, start_with_os: autostartEnabled ?? savedSettings.start_with_os });
+        setSavedKiosk(savedSettings.kiosk_mode);
         setPanicButtons(buttons);
       } catch (e) {
         console.error(e);
@@ -154,6 +160,8 @@ export function Settings() {
         toast.error("Configurações salvas, mas não foi possível atualizar o autostart");
         return;
       }
+      await invoke("set_kiosk_mode", { enabled: settings.kiosk_mode });
+      setSavedKiosk(settings.kiosk_mode);
       toast.success("Configurações salvas");
       changeLogService.log("saved", "settings");
     } catch (e) {
@@ -380,6 +388,36 @@ export function Settings() {
               checked={settings.start_with_os}
               onCheckedChange={(v) => set("start_with_os", v)}
             />
+            <div className="h-px bg-slate-100" />
+            <ToggleRow
+              label="Modo quiosque"
+              description="Bloqueia a janela em tela cheia — só sai desativando aqui"
+              checked={settings.kiosk_mode}
+              onCheckedChange={(v) => set("kiosk_mode", v)}
+            />
+            {settings.kiosk_mode && (
+              <ToggleRow
+                label="Iniciar em modo quiosque"
+                description="Aplica o modo quiosque automaticamente ao abrir o app"
+                checked={settings.kiosk_start}
+                onCheckedChange={(v) => set("kiosk_start", v)}
+              />
+            )}
+            {settings.kiosk_mode !== savedKiosk && (
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5">
+                <p className="text-xs text-amber-700 font-medium">
+                  Salve e recarregue o app para aplicar o modo quiosque.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100 flex-shrink-0"
+                  onClick={async () => { await handleSave(); await relaunch(); }}
+                >
+                  Salvar e reiniciar
+                </Button>
+              </div>
+            )}
             <div className="h-px bg-slate-100" />
             <div className="space-y-2">
               <div className="flex items-center justify-between">
