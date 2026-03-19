@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WeekdayToggle } from "./WeekdayToggle";
 import { useAudioStore } from "@/stores/audioStore";
+import { useScheduleStore } from "@/stores/scheduleStore";
+import { AlertTriangle } from "lucide-react";
 import type { Schedule, ScheduleFormData, DayOfWeek } from "@/types";
 
 const schema = z.object({
@@ -35,6 +37,7 @@ interface Props {
 
 export function ScheduleFormModal({ open, schedule, onClose, onSave }: Props) {
   const { folders, files, fetchFolders, fetchFiles } = useAudioStore();
+  const { schedules } = useScheduleStore();
 
   const { register, handleSubmit, control, watch, reset, formState: { errors, isSubmitting } } =
     useForm<ScheduleFormData>({
@@ -53,6 +56,18 @@ export function ScheduleFormModal({ open, schedule, onClose, onSave }: Props) {
     });
 
   const selectedFolderId = watch("folder_id");
+  const watchedTime = watch("time");
+  const watchedDays = watch("days_of_week");
+
+  const conflicts = useMemo(() => {
+    if (!watchedTime || !watchedDays?.length) return [];
+    return schedules.filter((s) => {
+      if (!s.is_active) return false;
+      if (schedule && s.id === schedule.id) return false;
+      if (s.time !== watchedTime) return false;
+      return s.days_of_week.some((d: number) => watchedDays.includes(d as any));
+    });
+  }, [schedules, watchedTime, watchedDays, schedule]);
 
   useEffect(() => {
     fetchFolders();
@@ -109,6 +124,18 @@ export function ScheduleFormModal({ open, schedule, onClose, onSave }: Props) {
               />
             </div>
           </div>
+
+          {conflicts.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-700">Conflito de horário</p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  {conflicts.map((c) => c.name?.trim() || c.time).join(", ")} já usa{conflicts.length > 1 ? "m" : ""} este horário nos mesmos dias. Apenas o primeiro cadastrado será executado.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label>Dias da semana</Label>

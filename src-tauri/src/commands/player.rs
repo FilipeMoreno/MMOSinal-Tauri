@@ -40,8 +40,12 @@ pub async fn play_manual(
         .map(|ms| (ms as u64).saturating_add(999) / 1000) // ms → s, rounded up
         .unwrap_or(u32::MAX as u64);
 
+    let default_volume = crate::db::repos::settings_repo::get(&state.pool).await
+        .map(|s| s.default_volume)
+        .unwrap_or(1.0);
+
     let eng = state.engine.lock().await;
-    eng.play(file, None, duration_s, 0, 0, &state.pool, &app).await
+    eng.play(file, None, None, duration_s, 0, 0, default_volume, &state.pool, &app).await
 }
 
 #[tauri::command]

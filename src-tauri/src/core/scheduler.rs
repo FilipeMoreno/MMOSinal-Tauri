@@ -6,9 +6,8 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::db::models::log::NewLog;
-use crate::db::repos::{audio_repo, holiday_repo, log_repo, schedule_repo};
+use crate::db::repos::{audio_repo, holiday_repo, log_repo, schedule_repo, settings_repo};
 use crate::core::player_engine::PlayerEngine;
-use crate::db::models::audio::AudioFile;
 
 /// Converts chrono Weekday to our 1-7 scheme (1=Mon, 7=Sun)
 fn weekday_to_num(w: Weekday) -> u8 {
@@ -23,30 +22,6 @@ fn weekday_to_num(w: Weekday) -> u8 {
     }
 }
 
-/// Returns the next audio file to play from a folder (sequential with resume awareness)
-async fn next_file_for_folder(pool: &SqlitePool, folder_id: i64) -> Option<AudioFile> {
-    let files = audio_repo::list_files(pool, folder_id).await.ok()?;
-    if files.is_empty() { return None; }
-
-    // Find the file with the highest position_ms that hasn't reached its duration yet
-    // If all are at 0 or done, start from the first
-    for file in &files {
-        let state = audio_repo::get_playback_state(pool, file.id).await.ok().flatten();
-        let pos = state.map(|s| s.position_ms).unwrap_or(0);
-        let duration = file.duration_ms.unwrap_or(i64::MAX);
-
-        // If this file still has content to play (position < duration)
-        if pos < duration {
-            return Some(file.clone());
-        }
-    }
-
-    // All files have been fully played — reset all and return first
-    for file in &files {
-        let _ = audio_repo::upsert_playback_state(pool, file.id, 0, None).await;
-    }
-    files.into_iter().next()
-}
 
 /// Main scheduler loop — runs every second, checks if any schedule should fire
 pub async fn run_scheduler(
@@ -101,11 +76,15 @@ pub async fn run_scheduler(
             info!("Firing schedule: {} at {}", schedule.name, schedule.time);
 
             // Determine which file to play
+            let play_folder_id: Option<i64>;
             let file = if let Some(file_id) = schedule.audio_file_id {
+                play_folder_id = None;
                 audio_repo::get_file(&pool, file_id).await.ok().flatten()
             } else if let Some(folder_id) = schedule.folder_id {
-                next_file_for_folder(&pool, folder_id).await
+                play_folder_id = Some(folder_id);
+                audio_repo::next_file_for_folder(&pool, folder_id).await
             } else {
+                play_folder_id = None;
                 warn!("Schedule {} has no file or folder configured", schedule.id);
                 // Log as error
                 let _ = log_repo::insert(&pool, &NewLog {
@@ -127,14 +106,20 @@ pub async fn run_scheduler(
                 continue;
             };
 
+            let default_volume = settings_repo::get(&pool).await
+                .map(|s| s.default_volume)
+                .unwrap_or(1.0);
+
             let eng = engine.lock().await;
             let result = eng
                 .play(
                     file,
                     Some(schedule.clone()),
+                    play_folder_id,
                     schedule.play_duration_s as u64,
                     schedule.fade_in_s as u64,
                     schedule.fade_out_s as u64,
+                    default_volume,
                     &pool,
                     &app,
                 )
@@ -161,13 +146,9 @@ pub async fn run_scheduler(
 /// Compute seconds until the next scheduled signal (for dashboard)
 pub async fn seconds_until_next(pool: &SqlitePool) -> Option<crate::commands::schedule::NextSignal> {
     use crate::db::repos::{audio_repo as ar, schedule_repo as sr};
-    use crate::db::models::audio::AudioFolder;
 
     let now = Local::now();
     let current_day = weekday_to_num(now.weekday());
-    let current_date = now.format("%Y-%m-%d").to_string();
-
-    let is_holiday = holiday_repo::is_holiday(pool, &current_date).await.unwrap_or(false);
 
     let schedules = sr::list_active(pool).await.ok()?;
     if schedules.is_empty() { return None; }
@@ -180,6 +161,12 @@ pub async fn seconds_until_next(pool: &SqlitePool) -> Option<crate::commands::sc
     for day_offset in 0u32..7 {
         let check_day = ((current_day as u32 + day_offset - 1) % 7 + 1) as u8;
         let is_today = day_offset == 0;
+
+        // Check if the candidate date is a holiday
+        let check_date = (now + chrono::Duration::days(day_offset as i64))
+            .format("%Y-%m-%d").to_string();
+        let day_is_holiday = holiday_repo::is_holiday(pool, &check_date).await.unwrap_or(false);
+        if day_is_holiday { continue; }
 
         for schedule in &schedules {
             if !schedule.days_of_week.contains(&check_day) { continue; }
@@ -195,8 +182,6 @@ pub async fn seconds_until_next(pool: &SqlitePool) -> Option<crate::commands::sc
             } else {
                 (86400 * day_offset) + sched_secs - now_secs
             };
-
-            if is_holiday && day_offset == 0 { continue; }
 
             match &best {
                 None => best = Some((delta, schedule.clone())),
@@ -217,15 +202,7 @@ pub async fn seconds_until_next(pool: &SqlitePool) -> Option<crate::commands::sc
     } else { None };
 
     let folder = if let Some(fid) = schedule.folder_id {
-        sqlx::query_as!(
-            AudioFolder,
-            "SELECT id, name, description, created_at FROM audio_folders WHERE id = ?",
-            fid
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
+        ar::get_folder(pool, fid).await.ok().flatten()
     } else { None };
 
     Some(crate::commands::schedule::NextSignal {

@@ -105,6 +105,19 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES
     ('ntp_server', 'a.ntp.br'),
     ('ntp_auto_sync', 'false');
 
+-- ── Log de Alterações (auditoria de CRUD) ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS change_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    action      TEXT NOT NULL,          -- 'created', 'updated', 'deleted', 'moved', 'imported', 'saved'
+    entity_type TEXT NOT NULL,          -- 'schedule', 'audio_file', 'audio_folder', 'holiday', 'settings', 'panic_button'
+    entity_name TEXT,
+    details     TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+-- ── Adição de coluna shuffle (segura para bancos existentes) ─────────────────
+ALTER TABLE audio_folders ADD COLUMN shuffle INTEGER NOT NULL DEFAULT 0;
+
 -- ── Índices ──────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_schedules_active  ON schedules(is_active, time);
 CREATE INDEX IF NOT EXISTS idx_logs_triggered_at ON execution_logs(triggered_at DESC);

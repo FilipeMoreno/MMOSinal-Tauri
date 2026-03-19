@@ -133,6 +133,42 @@ pub fn run() {
                 });
             }
 
+            // Tray tooltip updater — refreshes every 10 seconds
+            {
+                let handle_tray = handle.clone();
+                let pool_tray = pool.clone();
+                let engine_tray = engine.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+                        let player_state = engine_tray.lock().await.state.lock().await.clone();
+
+                        let next_label = if matches!(player_state.status, crate::core::audio_state::PlayerStatus::Idle) {
+                            crate::core::scheduler::seconds_until_next(&pool_tray).await.map(|n| {
+                                let s = n.seconds_until;
+                                let name = if n.schedule.name.trim().is_empty() {
+                                    n.schedule.time.clone()
+                                } else {
+                                    n.schedule.name.clone()
+                                };
+                                if s < 60 {
+                                    format!("Próximo: {name} (em instantes)")
+                                } else if s < 3600 {
+                                    format!("Próximo: {name} (em {}min)", s / 60)
+                                } else {
+                                    format!("Próximo: {name} (em {}h {}min)", s / 3600, (s % 3600) / 60)
+                                }
+                            })
+                        } else {
+                            None
+                        };
+
+                        tray::update_tooltip(&handle_tray, &player_state, next_label);
+                    }
+                });
+            }
+
             // Auto-sync clock on startup if enabled
             if settings.ntp_auto_sync {
                 let ntp_server = settings.ntp_server.clone();
@@ -172,7 +208,10 @@ pub fn run() {
             commands::audio::import_audio_files,
             commands::audio::delete_audio_file,
             commands::audio::reorder_audio_files,
+            commands::audio::rename_audio_file,
+            commands::audio::move_audio_file,
             commands::audio::reset_playback_state,
+            commands::audio::update_folder_shuffle,
             // Schedules
             commands::schedule::list_schedules,
             commands::schedule::get_schedule,
@@ -200,11 +239,17 @@ pub fn run() {
             // Logs
             commands::log::list_execution_logs,
             commands::log::clear_execution_logs,
+            // Change logs
+            commands::change_log::log_change,
+            commands::change_log::list_change_logs,
+            commands::change_log::clear_change_logs,
             // Backup
             commands::backup::trigger_backup,
             // Settings
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::export_config,
+            commands::settings::import_config,
             // Time Sync
             commands::timesync::sync_time,
         ])

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: i64\", name, description, created_at FROM audio_folders ORDER BY name",
+  "query": "SELECT id as \"id!: i64\", name, description, shuffle as \"shuffle!: bool\", created_at\n           FROM audio_folders ORDER BY name",
   "describe": {
     "columns": [
       {
@@ -19,8 +19,13 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "shuffle!: bool",
         "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
         "type_info": "Text"
       }
     ],
@@ -31,8 +36,9 @@
       true,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "39e180512ac405a1d3aacf06b0b212363d1334a35c17c18315bce8a1c69cbd0f"
+  "hash": "ce131fe65547520a14297783bec63e1f65c1d6473de77b87b778015a9acc6cb8"
 }

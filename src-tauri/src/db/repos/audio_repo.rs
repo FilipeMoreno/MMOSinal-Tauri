@@ -2,21 +2,94 @@ use sqlx::SqlitePool;
 use crate::db::models::audio::{AudioFile, AudioFolder, AudioPlaybackState};
 use crate::error::Result;
 
+/// Returns the next audio file to play from a folder.
+///
+/// Resume rule (same for both modes): if any file has 0 < saved_pos < duration,
+/// that file is "in progress" and is always returned first so playback resumes.
+///
+/// Selection rule (when no file is in progress):
+///   Sequential → first unplayed file in sort_order, wrapping around after all played.
+///   Shuffle    → random unplayed file, wrapping around after all played.
+pub async fn next_file_for_folder(pool: &SqlitePool, folder_id: i64) -> Option<AudioFile> {
+    let folder = get_folder(pool, folder_id).await.ok()??;
+    let files = list_files(pool, folder_id).await.ok()?;
+    if files.is_empty() { return None; }
+
+    // Collect (file, saved_pos, duration) for all files in one pass
+    let mut file_states: Vec<(AudioFile, i64, i64)> = Vec::with_capacity(files.len());
+    for file in &files {
+        let state = get_playback_state(pool, file.id).await.ok().flatten();
+        let pos = state.map(|s| s.position_ms).unwrap_or(0);
+        let duration = file.duration_ms.unwrap_or(i64::MAX);
+        file_states.push((file.clone(), pos, duration));
+    }
+
+    // 1. Resume any file that is partially played
+    if let Some((file, _, _)) = file_states.iter().find(|(_, pos, dur)| *pos > 0 && pos < dur) {
+        return Some(file.clone());
+    }
+
+    // 2. Pick from files not yet started (position == 0)
+    let unplayed: Vec<&AudioFile> = file_states.iter()
+        .filter(|(_, pos, _)| *pos == 0)
+        .map(|(f, _, _)| f)
+        .collect();
+
+    if !unplayed.is_empty() {
+        return Some(if folder.shuffle {
+            let idx = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos() as usize % unplayed.len();
+            unplayed[idx].clone()
+        } else {
+            unplayed[0].clone()
+        });
+    }
+
+    // 3. All files played — reset and start over
+    for file in &files {
+        let _ = upsert_playback_state(pool, file.id, 0, None).await;
+    }
+    if folder.shuffle {
+        let idx = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as usize % files.len();
+        files.into_iter().nth(idx)
+    } else {
+        files.into_iter().next()
+    }
+}
+
 // ── Folders ──────────────────────────────────────────────────────────────────
 
 pub async fn list_folders(pool: &SqlitePool) -> Result<Vec<AudioFolder>> {
     Ok(sqlx::query_as!(
         AudioFolder,
-        "SELECT id as \"id!: i64\", name, description, created_at FROM audio_folders ORDER BY name"
+        r#"SELECT id as "id!: i64", name, description, shuffle as "shuffle!: bool", created_at
+           FROM audio_folders ORDER BY name"#
     )
     .fetch_all(pool)
     .await?)
 }
 
-pub async fn create_folder(pool: &SqlitePool, name: &str, description: Option<&str>) -> Result<AudioFolder> {
+pub async fn get_folder(pool: &SqlitePool, id: i64) -> Result<Option<AudioFolder>> {
+    Ok(sqlx::query_as!(
+        AudioFolder,
+        r#"SELECT id as "id!: i64", name, description, shuffle as "shuffle!: bool", created_at
+           FROM audio_folders WHERE id = ?"#,
+        id
+    )
+    .fetch_optional(pool)
+    .await?)
+}
+
+pub async fn create_folder(pool: &SqlitePool, name: &str, description: Option<&str>, shuffle: bool) -> Result<AudioFolder> {
+    let shuffle_int = shuffle as i64;
     let id = sqlx::query!(
-        "INSERT INTO audio_folders (name, description) VALUES (?, ?)",
-        name, description
+        "INSERT INTO audio_folders (name, description, shuffle) VALUES (?, ?, ?)",
+        name, description, shuffle_int
     )
     .execute(pool)
     .await?
@@ -24,24 +97,46 @@ pub async fn create_folder(pool: &SqlitePool, name: &str, description: Option<&s
 
     Ok(sqlx::query_as!(
         AudioFolder,
-        "SELECT id as \"id!: i64\", name, description, created_at FROM audio_folders WHERE id = ?",
+        r#"SELECT id as "id!: i64", name, description, shuffle as "shuffle!: bool", created_at
+           FROM audio_folders WHERE id = ?"#,
         id
     )
     .fetch_one(pool)
     .await?)
 }
 
-pub async fn update_folder(pool: &SqlitePool, id: i64, name: &str, description: Option<&str>) -> Result<AudioFolder> {
+pub async fn update_folder(pool: &SqlitePool, id: i64, name: &str, description: Option<&str>, shuffle: bool) -> Result<AudioFolder> {
+    let shuffle_int = shuffle as i64;
     sqlx::query!(
-        "UPDATE audio_folders SET name = ?, description = ? WHERE id = ?",
-        name, description, id
+        "UPDATE audio_folders SET name = ?, description = ?, shuffle = ? WHERE id = ?",
+        name, description, shuffle_int, id
     )
     .execute(pool)
     .await?;
 
     Ok(sqlx::query_as!(
         AudioFolder,
-        "SELECT id as \"id!: i64\", name, description, created_at FROM audio_folders WHERE id = ?",
+        r#"SELECT id as "id!: i64", name, description, shuffle as "shuffle!: bool", created_at
+           FROM audio_folders WHERE id = ?"#,
+        id
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
+pub async fn update_folder_shuffle(pool: &SqlitePool, id: i64, shuffle: bool) -> Result<AudioFolder> {
+    let shuffle_int = shuffle as i64;
+    sqlx::query!(
+        "UPDATE audio_folders SET shuffle = ? WHERE id = ?",
+        shuffle_int, id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(sqlx::query_as!(
+        AudioFolder,
+        r#"SELECT id as "id!: i64", name, description, shuffle as "shuffle!: bool", created_at
+           FROM audio_folders WHERE id = ?"#,
         id
     )
     .fetch_one(pool)
@@ -102,6 +197,50 @@ pub async fn insert_file(
         "SELECT id as \"id!: i64\", folder_id, name, filename, file_path, duration_ms, sort_order, created_at
          FROM audio_files WHERE id = ?",
         id
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
+pub async fn rename_file(pool: &SqlitePool, id: i64, name: &str) -> Result<AudioFile> {
+    sqlx::query!("UPDATE audio_files SET name = ? WHERE id = ?", name, id)
+        .execute(pool)
+        .await?;
+    Ok(sqlx::query_as!(
+        AudioFile,
+        "SELECT id as \"id!: i64\", folder_id, name, filename, file_path, duration_ms, sort_order, created_at
+         FROM audio_files WHERE id = ?",
+        id
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
+pub async fn move_file(
+    pool: &SqlitePool,
+    file_id: i64,
+    target_folder_id: i64,
+    new_file_path: &str,
+) -> Result<AudioFile> {
+    // Place at end of target folder
+    let count = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM audio_files WHERE folder_id = ?",
+        target_folder_id
+    )
+    .fetch_one(pool)
+    .await?;
+    let sort_order = count;
+    sqlx::query!(
+        "UPDATE audio_files SET folder_id = ?, file_path = ?, sort_order = ? WHERE id = ?",
+        target_folder_id, new_file_path, sort_order, file_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(sqlx::query_as!(
+        AudioFile,
+        "SELECT id as \"id!: i64\", folder_id, name, filename, file_path, duration_ms, sort_order, created_at
+         FROM audio_files WHERE id = ?",
+        file_id
     )
     .fetch_one(pool)
     .await?)

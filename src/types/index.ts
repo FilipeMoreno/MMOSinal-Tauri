@@ -4,6 +4,7 @@ export interface AudioFolder {
   id: number;
   name: string;
   description: string | null;
+  shuffle: boolean;
   created_at: string;
 }
 
@@ -81,6 +82,17 @@ export interface Holiday {
   created_at: string;
 }
 
+// ─── Change / Audit Logs ─────────────────────────────────────────────────────
+
+export interface ChangeLog {
+  id: number;
+  action: string;       // 'created' | 'updated' | 'deleted' | 'moved' | 'imported' | 'saved'
+  entity_type: string;  // 'schedule' | 'audio_file' | 'audio_folder' | 'holiday' | 'settings' | 'panic_button'
+  entity_name: string | null;
+  details: string | null;
+  created_at: string;
+}
+
 // ─── Execution Logs ──────────────────────────────────────────────────────────
 
 export type TriggerType = "scheduled" | "manual" | "panic";
@@ -141,6 +153,14 @@ export interface AppSettings {
   start_with_os: boolean;
   ntp_server: string;
   ntp_auto_sync: boolean;
+  default_volume: number; // 0.0 - 1.0
+  setup_complete: boolean;
+}
+
+export interface ImportResult {
+  schedules_imported: number;
+  holidays_imported: number;
+  panic_buttons_imported: number;
 }
 
 export interface TimeSyncResult {
