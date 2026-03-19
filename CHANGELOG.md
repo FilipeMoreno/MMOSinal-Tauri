@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.8] - 2026-03-19
+
+### Corrigido
+- CI: erro de sintaxe YAML causado por heredoc Python no workflow (movido para `scripts/gen_latest_json.py`).
+- CI: notas da versão no `latest.json` agora são extraídas automaticamente do `CHANGELOG.md` e exibidas no diálogo de atualização.
+
+---
+
 ## [1.2.7] - 2026-03-19
 
 ### Adicionado
