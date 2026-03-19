@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.3] - 2026-03-19
+
+### Alterado
+- CI: build de release ~50% mais rápido (perfil `release-ci`, target apenas NSIS, LTO desativado no CI).
+
+---
+
 ## [1.2.2] - 2026-03-19
 
 ### Adicionado

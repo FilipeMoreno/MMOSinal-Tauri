@@ -1,6 +1,6 @@
 [package]
 name = "mmo-sinal-tauri"
-version = "1.2.2"
+version = "1.2.3"
 description = "Gerenciador de Sirenes Escolares"
 authors = ["MMO Sinal"]
 edition = "2021"
@@ -57,3 +57,11 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Perfil usado no CI — build mais rápido, binário um pouco maior
+[profile.release-ci]
+inherits = "release"
+lto = false
+codegen-units = 16
+opt-level = 2
+strip = false
