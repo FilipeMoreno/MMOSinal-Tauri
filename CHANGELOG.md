@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.2.6] - 2026-03-19
+
+### Corrigido
+- CI: adicionado `createUpdaterArtifacts: true` no `tauri.conf.json` para forçar geração dos arquivos `.sig` necessários para o `latest.json`.
+
+---
+
 ## [1.2.5] - 2026-03-19
 
 ### Corrigido

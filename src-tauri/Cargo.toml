@@ -1,6 +1,6 @@
 [package]
 name = "mmo-sinal-tauri"
-version = "1.2.5"
+version = "1.2.6"
 description = "Gerenciador de Sirenes Escolares"
 authors = ["MMO Sinal"]
 edition = "2021"
