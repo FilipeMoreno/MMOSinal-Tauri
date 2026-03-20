@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAudioStore } from "@/stores/audioStore";
 import { usePlayerStore } from "@/stores/playerStore";
+import { useUiStore } from "@/stores/uiStore";
 import { playerService } from "@/services/playerService";
 import { formatDuration } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -415,6 +416,18 @@ export function ManualSignalPanel() {
   const { status, current_file, current_schedule, position_ms, volume } =
     usePlayerStore();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const manualSignalTrigger = useUiStore((s) => s.manualSignalTrigger);
+  // Track the last-seen trigger so we only open on *new* increments, not on mount
+  const prevTriggerRef = useRef(manualSignalTrigger);
+
+  useEffect(() => {
+    if (manualSignalTrigger > prevTriggerRef.current) {
+      prevTriggerRef.current = manualSignalTrigger;
+      if (!(status !== "idle" && current_schedule !== null)) {
+        setPickerOpen(true);
+      }
+    }
+  }, [manualSignalTrigger]); // intentionally omit status/current_schedule
   const [dragValue, setDragValue] = useState<number | null>(null);
 
   const [displayQueue, setDisplayQueue] = useState<AudioFile[]>([]);

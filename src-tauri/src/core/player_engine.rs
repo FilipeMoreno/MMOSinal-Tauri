@@ -97,6 +97,15 @@ impl PlayerEngine {
             .map(|s| s.position_ms)
             .unwrap_or(0);
 
+        // Silence skip: if saved position is at or past the content end, mark done and skip.
+        let effective_end = file.content_end_ms.or(file.duration_ms).unwrap_or(i64::MAX);
+        let effective_start = file.content_start_ms.unwrap_or(0);
+        if saved_pos > 0 && saved_pos >= effective_end {
+            let _ = audio_repo::upsert_playback_state(pool, file.id, effective_end, schedule_id).await;
+            // The next scheduler invocation of next_file_for_folder will skip this file correctly.
+            return Ok(());
+        }
+
         let schedule_name = schedule.as_ref().map(|s| s.name.clone());
 
         // Claim a new play slot.
@@ -163,9 +172,17 @@ impl PlayerEngine {
         };
         sink.set_volume(if fade_in_s > 0 { 0.0 } else { volume });
         sink.append(source);
-        if saved_pos > 0 {
-            let _ = sink.try_seek(Duration::from_millis(saved_pos as u64));
+
+        // Seek: skip leading silence when starting from 0, otherwise resume saved position.
+        let actual_seek = if saved_pos == 0 && effective_start > 0 {
+            effective_start
+        } else {
+            saved_pos
+        };
+        if actual_seek > 0 {
+            let _ = sink.try_seek(Duration::from_millis(actual_seek as u64));
         }
+
         let sink = Arc::new(sink);
         *self.sink.lock().await = Some(sink.clone());
 
@@ -175,7 +192,7 @@ impl PlayerEngine {
             st.status = if fade_in_s > 0 { PlayerStatus::FadingIn } else { PlayerStatus::Playing };
             st.current_file = Some(file.clone());
             st.current_schedule = schedule.clone();
-            st.position_ms = saved_pos;
+            st.position_ms = actual_seek;
             st.volume = if fade_in_s > 0 { 0.0 } else { volume };
         }
         self.emit_state(app).await;
@@ -226,8 +243,10 @@ impl PlayerEngine {
 
             // ── Current-file tracking (changes on chain) ──────────────────────
             let mut current_file = file;
-            let mut current_pos_start = saved_pos;
+            let mut current_pos_start = actual_seek;
             let mut seg_start = overall_start;
+            // When content_end_ms is reached mid-play, stores the position to persist.
+            let mut content_end_done_pos: Option<i64> = None;
             let mut tick: u32 = 0;
             // Set to true when a device error is detected and already logged,
             // so the cleanup block does not emit a duplicate success/interrupted log.
@@ -246,40 +265,51 @@ impl PlayerEngine {
                     None => break, // stop() was called
                 };
 
-                // File ended before schedule duration — or device disconnected
+                // File ended before schedule duration — or device disconnected,
+                // or content_end_ms was reached (cur_sink was stopped by us).
                 if cur_sink.empty() {
-                    // Distinguish natural end-of-file from device failure:
-                    // if we cannot create a new sink the output device is gone.
-                    // Use spawn_blocking + timeout to avoid freezing the async task when
-                    // the audio driver hangs on Windows after a device removal.
-                    let sh = stream_handle_clone.clone();
-                    let device_gone = tokio::time::timeout(
-                        Duration::from_millis(500),
-                        tokio::task::spawn_blocking(move || Sink::try_new(&sh).is_err()),
-                    ).await.unwrap_or(Ok(true)).unwrap_or(true);
+                    let triggered_by_content_end = content_end_done_pos.is_some();
 
-                    if device_gone {
-                        let seg_ms = seg_start.elapsed().as_millis() as i64;
-                        warn!(
-                            "Audio device disconnected during playback of '{}' (played {}ms)",
-                            current_file.name, seg_ms
-                        );
-                        log_execution_fn(
-                            &pool_clone, schedule_id, current_file.id,
-                            schedule_name.clone(), current_file.name.clone(),
-                            if schedule_id.is_some() { "scheduled" } else { "manual" },
-                            "error", seg_ms, current_pos_start,
-                            Some("Dispositivo de áudio desconectado ou indisponível".to_string()),
-                        ).await;
-                        device_error_logged = true;
-                        break 'play_loop;
+                    // Only probe for device failure on natural EOF (not content_end stop).
+                    if !triggered_by_content_end {
+                        // Distinguish natural end-of-file from device failure:
+                        // if we cannot create a new sink the output device is gone.
+                        // Use spawn_blocking + timeout to avoid freezing the async task when
+                        // the audio driver hangs on Windows after a device removal.
+                        let sh = stream_handle_clone.clone();
+                        let device_gone = tokio::time::timeout(
+                            Duration::from_millis(500),
+                            tokio::task::spawn_blocking(move || Sink::try_new(&sh).is_err()),
+                        ).await.unwrap_or(Ok(true)).unwrap_or(true);
+
+                        if device_gone {
+                            let seg_ms = seg_start.elapsed().as_millis() as i64;
+                            warn!(
+                                "Audio device disconnected during playback of '{}' (played {}ms)",
+                                current_file.name, seg_ms
+                            );
+                            let err_msg = "Dispositivo de áudio desconectado ou indisponível".to_string();
+                            log_execution_fn(
+                                &pool_clone, schedule_id, current_file.id,
+                                schedule_name.clone(), current_file.name.clone(),
+                                if schedule_id.is_some() { "scheduled" } else { "manual" },
+                                "error", seg_ms, current_pos_start,
+                                Some(err_msg.clone()),
+                            ).await;
+                            let _ = app_clone.emit("audio-device-error", &err_msg);
+                            device_error_logged = true;
+                            break 'play_loop;
+                        }
                     }
 
-                    // Mark this file as fully played so next_file_for_folder skips it
+                    // Mark this file as fully played so next_file_for_folder skips it.
+                    // Use content_end_ms as done-position when we triggered the stop ourselves.
+                    let done_pos = content_end_done_pos.take()
+                        .unwrap_or_else(|| current_file.duration_ms.unwrap_or(i64::MAX));
                     let _ = audio_repo::upsert_playback_state(
                         &pool_clone,
                         current_file.id,
-                        current_file.duration_ms.unwrap_or(i64::MAX),
+                        done_pos,
                         schedule_id,
                     ).await;
 
@@ -304,14 +334,22 @@ impl PlayerEngine {
                                     .map(|s| s.position_ms)
                                     .unwrap_or(0);
 
+                                // Apply content_start seek for the next file if starting from 0
+                                let next_start = next_f.content_start_ms.unwrap_or(0);
+                                let next_actual_seek = if next_pos == 0 && next_start > 0 {
+                                    next_start
+                                } else {
+                                    next_pos
+                                };
+
                                 if let Ok(f) = File::open(&next_f.file_path) {
                                     if let Ok(src) = Decoder::new(BufReader::new(f)) {
                                         if let Ok(new_sink) = Sink::try_new(&stream_handle_clone) {
                                             new_sink.set_volume(target_volume);
                                             new_sink.append(src);
-                                            if next_pos > 0 {
+                                            if next_actual_seek > 0 {
                                                 let _ = new_sink.try_seek(
-                                                    Duration::from_millis(next_pos as u64)
+                                                    Duration::from_millis(next_actual_seek as u64)
                                                 );
                                             }
                                             let new_sink = Arc::new(new_sink);
@@ -320,14 +358,14 @@ impl PlayerEngine {
                                             {
                                                 let mut st = state_clone.lock().await;
                                                 st.current_file = Some(next_f.clone());
-                                                st.position_ms = next_pos;
+                                                st.position_ms = next_actual_seek;
                                                 st.status = PlayerStatus::Playing;
                                                 st.volume = target_volume;
                                             }
                                             emit_state_fn(&state_clone, &app_clone).await;
 
                                             current_file = next_f;
-                                            current_pos_start = next_pos;
+                                            current_pos_start = next_actual_seek;
                                             seg_start = std::time::Instant::now();
                                             continue 'play_loop;
                                         }
@@ -342,9 +380,21 @@ impl PlayerEngine {
                 }
 
                 // Update position
+                let position_ms = cur_sink.get_pos().as_millis() as i64;
                 {
                     let mut st = state_clone.lock().await;
-                    st.position_ms = cur_sink.get_pos().as_millis() as i64;
+                    st.position_ms = position_ms;
+                }
+
+                // Content-end silence detection: stop the sink so the next tick
+                // enters the EOF/chaining branch.
+                if content_end_done_pos.is_none() {
+                    if let Some(end_ms) = current_file.content_end_ms {
+                        if position_ms >= end_ms {
+                            content_end_done_pos = Some(end_ms);
+                            cur_sink.stop();
+                        }
+                    }
                 }
 
                 // Fade out based on total elapsed time (applies at end of session)
@@ -379,13 +429,15 @@ impl PlayerEngine {
                             "Audio device disconnected during playback of '{}' (played {}ms)",
                             current_file.name, seg_ms
                         );
+                        let err_msg = "Dispositivo de áudio desconectado ou indisponível".to_string();
                         log_execution_fn(
                             &pool_clone, schedule_id, current_file.id,
                             schedule_name.clone(), current_file.name.clone(),
                             if schedule_id.is_some() { "scheduled" } else { "manual" },
                             "error", seg_ms, current_pos_start,
-                            Some("Dispositivo de áudio desconectado ou indisponível".to_string()),
+                            Some(err_msg.clone()),
                         ).await;
+                        let _ = app_clone.emit("audio-device-error", &err_msg);
                         device_error_logged = true;
                         break 'play_loop;
                     }

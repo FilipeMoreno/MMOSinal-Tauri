@@ -37,6 +37,7 @@ const ACTION_LABEL: Record<string, { label: string; color: string }> = {
   renamed:  { label: "Renomeado",   color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   triggered:{ label: "Disparado",   color: "bg-orange-50 text-orange-700 border-orange-200" },
   exported: { label: "Exportado",   color: "bg-teal-50 text-teal-700 border-teal-200"       },
+  analyzed: { label: "Analisado",   color: "bg-violet-50 text-violet-700 border-violet-200"  },
 };
 
 const ENTITY_LABEL: Record<string, string> = {

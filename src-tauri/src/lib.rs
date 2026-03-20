@@ -237,6 +237,8 @@ pub fn run() {
             commands::audio::move_audio_file,
             commands::audio::reset_playback_state,
             commands::audio::update_folder_shuffle,
+            commands::audio::scan_folder_silence,
+            commands::audio::analyze_file_silence,
             // Schedules
             commands::schedule::list_schedules,
             commands::schedule::get_schedule,

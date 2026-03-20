@@ -136,3 +136,7 @@ CREATE INDEX IF NOT EXISTS idx_schedules_active  ON schedules(is_active, time);
 CREATE INDEX IF NOT EXISTS idx_logs_triggered_at ON execution_logs(triggered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_holidays_date     ON holidays(date);
 CREATE INDEX IF NOT EXISTS idx_audio_files_folder ON audio_files(folder_id, sort_order);
+
+-- ── Análise de Silêncio (início/fim do conteúdo real) ────────────────────────
+ALTER TABLE audio_files ADD COLUMN content_start_ms INTEGER;
+ALTER TABLE audio_files ADD COLUMN content_end_ms INTEGER;

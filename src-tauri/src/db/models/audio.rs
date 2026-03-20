@@ -19,6 +19,10 @@ pub struct AudioFile {
     pub duration_ms: Option<i64>,
     pub sort_order: i64,
     pub created_at: String,
+    #[sqlx(default)]
+    pub content_start_ms: Option<i64>,
+    #[sqlx(default)]
+    pub content_end_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

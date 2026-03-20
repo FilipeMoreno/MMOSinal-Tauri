@@ -17,6 +17,8 @@ export interface AudioFile {
   duration_ms: number | null;
   sort_order: number;
   created_at: string;
+  content_start_ms: number | null;
+  content_end_ms: number | null;
 }
 
 export interface AudioPlaybackState {

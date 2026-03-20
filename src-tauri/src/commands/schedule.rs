@@ -96,3 +96,8 @@ pub async fn toggle_schedule_active(
 pub async fn get_next_signal(state: State<'_, AppState>) -> Result<Option<NextSignal>> {
     Ok(crate::core::scheduler::seconds_until_next(&state.pool).await)
 }
+
+#[tauri::command]
+pub async fn duplicate_schedule(id: i64, state: State<'_, AppState>) -> Result<Schedule> {
+    schedule_repo::duplicate(&state.pool, id).await
+}

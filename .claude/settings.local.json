@@ -44,7 +44,8 @@
       "Bash(python3 init_db.py)",
       "Bash(npx tsc:*)",
       "Bash(python -c \":*)",
-      "Bash(npx tauri:*)"
+      "Bash(npx tauri:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:/workspace/MMOSinalTauri/src-tauri/nsis/generate-images.ps1\" 2>&1)"
     ]
   }
 }

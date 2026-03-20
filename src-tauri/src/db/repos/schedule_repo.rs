@@ -100,3 +100,28 @@ pub async fn toggle_active(pool: &SqlitePool, id: i64, active: bool) -> Result<(
     .await?;
     Ok(())
 }
+
+pub async fn duplicate(pool: &SqlitePool, id: i64) -> Result<Schedule> {
+    let original = get_by_id(pool, id).await?
+        .ok_or_else(|| crate::error::AppError::NotFound(format!("Schedule {id}")))?;
+
+    let base = if original.name.trim().is_empty() { &original.time } else { &original.name };
+    let name = format!("Cópia de {}", base);
+    let days_json = serde_json::to_string(&original.days_of_week)
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let new_id = sqlx::query!(
+        "INSERT INTO schedules (name, time, days_of_week, folder_id, audio_file_id,
+                                play_duration_s, fade_in_s, fade_out_s, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        name, original.time, days_json,
+        original.folder_id, original.audio_file_id,
+        original.play_duration_s, original.fade_in_s, original.fade_out_s,
+        false
+    )
+    .execute(pool)
+    .await?
+    .last_insert_rowid();
+
+    get_by_id(pool, new_id).await?.ok_or_else(|| crate::error::AppError::NotFound(format!("Schedule {new_id}")))
+}

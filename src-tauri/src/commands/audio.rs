@@ -108,11 +108,66 @@ pub async fn import_audio_files(
         )
         .await?;
 
+        // Analyze silence asynchronously via blocking thread
+        let dest_str = dest_path.to_str().unwrap_or("").to_string();
+        let (start_ms, end_ms) = tokio::task::spawn_blocking(
+            move || crate::core::silence::analyze_silence(&dest_str)
+        )
+        .await
+        .unwrap_or((None, None));
+
+        // Always persist analysis result (start_ms is Some(0) for "analyzed, no silence")
+        let _ = audio_repo::update_content_boundaries(&state.pool, file.id, start_ms, end_ms).await;
+        let file = audio_repo::get_file(&state.pool, file.id)
+            .await?
+            .unwrap_or(file);
+
         next_order += 1;
         imported.push(file);
     }
 
     Ok(imported)
+}
+
+#[tauri::command]
+pub async fn analyze_file_silence(
+    file_id: i64,
+    state: State<'_, AppState>,
+) -> Result<AudioFile> {
+    let file = audio_repo::get_file(&state.pool, file_id)
+        .await?
+        .ok_or_else(|| AppError::InvalidInput("Arquivo não encontrado".into()))?;
+
+    let path = file.file_path.clone();
+    let (start_ms, end_ms) = tokio::task::spawn_blocking(
+        move || crate::core::silence::analyze_silence(&path)
+    )
+    .await
+    .unwrap_or((None, None));
+
+    let _ = audio_repo::update_content_boundaries(&state.pool, file_id, start_ms, end_ms).await;
+
+    audio_repo::get_file(&state.pool, file_id)
+        .await?
+        .ok_or_else(|| AppError::InvalidInput("Arquivo não encontrado".into()))
+}
+
+#[tauri::command]
+pub async fn scan_folder_silence(
+    folder_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<AudioFile>> {
+    let files = audio_repo::list_files(&state.pool, folder_id).await?;
+    for file in &files {
+        let path = file.file_path.clone();
+        let (start_ms, end_ms) = tokio::task::spawn_blocking(
+            move || crate::core::silence::analyze_silence(&path)
+        )
+        .await
+        .unwrap_or((None, None));
+        let _ = audio_repo::update_content_boundaries(&state.pool, file.id, start_ms, end_ms).await;
+    }
+    audio_repo::list_files(&state.pool, folder_id).await
 }
 
 fn get_audio_duration(path: &str) -> Option<i64> {

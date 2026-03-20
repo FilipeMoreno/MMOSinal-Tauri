@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Music, Trash2, RotateCcw, Upload, GripVertical, MoreVertical,
-  Edit2, FolderInput, Check, X, Shuffle, ArrowDownUp,
+  Edit2, FolderInput, Check, X, Shuffle, ArrowDownUp, ScanLine, Loader2,
 } from "lucide-react";
 import { useConfirm } from "@/hooks/useConfirm";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -33,6 +33,62 @@ interface MovePickerState {
   anchorY: number;
 }
 
+function msToS(ms: number): string {
+  return (ms / 1000).toFixed(1) + "s";
+}
+
+function SilenceBadge({ file }: { file: AudioFile }) {
+  const scanningFileId = useAudioStore((s) => s.scanningFileId);
+
+  if (scanningFileId === file.id) {
+    return (
+      <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 border border-blue-200 font-medium leading-none flex items-center gap-1">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        Analisando...
+      </span>
+    );
+  }
+
+  // content_start_ms === null means file was never analyzed
+  // content_start_ms === 0   means analyzed, no leading silence
+  // content_start_ms > 0     means analyzed, has leading silence
+  const isAnalyzed = file.content_start_ms !== null;
+  const hasLeadingSilence = isAnalyzed && file.content_start_ms! > 0;
+  const hasTrailingSilence = file.content_end_ms !== null;
+
+  if (!isAnalyzed) {
+    return (
+      <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 font-medium leading-none">
+        Não analisado
+      </span>
+    );
+  }
+
+  if (!hasLeadingSilence && !hasTrailingSilence) {
+    return (
+      <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 border border-green-200 font-medium leading-none">
+        ✓ Sem silêncio
+      </span>
+    );
+  }
+
+  const parts: string[] = [];
+  if (hasLeadingSilence) parts.push(`+${msToS(file.content_start_ms!)}`);
+  if (hasTrailingSilence && file.duration_ms) {
+    const trailMs = file.duration_ms - file.content_end_ms!;
+    if (trailMs > 0) parts.push(`-${msToS(trailMs)}`);
+  }
+
+  return (
+    <span
+      className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 font-medium leading-none"
+      title={`Silêncio — início: ${msToS(file.content_start_ms ?? 0)}, fim do conteúdo: ${file.content_end_ms != null ? msToS(file.content_end_ms) : "até o fim"}`}
+    >
+      ~silêncio{parts.length > 0 ? ` (${parts.join(", ")})` : ""}
+    </span>
+  );
+}
+
 export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder }: Props) {
   const {
     selectedFolderId,
@@ -42,14 +98,20 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
     removeFile,
     fetchFiles,
     setFiles,
+    updateFile,
     moveFile: moveFileInStore,
     renameFileInStore,
     updateFolder,
+    scanningFolderId,
+    setScanningFolder,
+    setScanningFile,
   } = useAudioStore();
   const { confirm, dialog } = useConfirm();
 
   const folderId = selectedFolderId;
   const folderFiles = folderId ? (files[folderId] ?? []) : [];
+
+  const isScanning = folderId !== null && scanningFolderId === folderId;
 
   // ── Drag-reorder state ───────────────────────────────────────────────────
   const dragIndexRef = useRef<number | null>(null);
@@ -98,6 +160,51 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
   useEffect(() => {
     if (folderId) fetchFiles(folderId);
   }, [folderId, fetchFiles]);
+
+  // ── Silence scan (per-file, progressive) ─────────────────────────────────
+  const handleScanSilence = async () => {
+    if (!folderId || scanningFolderId !== null) return;
+    const filesToScan = folderFiles;
+    if (filesToScan.length === 0) return;
+
+    setScanningFolder(folderId);
+    changeLogService.log(
+      "analyzed",
+      "audio_file",
+      currentFolder?.name ?? null,
+      `Análise de silêncio iniciada: ${filesToScan.length} arquivo(s)`,
+    );
+
+    let withSilence = 0;
+    for (const file of filesToScan) {
+      setScanningFile(file.id);
+      try {
+        const updated = await audioService.analyzeFileSilence(file.id);
+        updateFile(folderId, updated);
+        if (updated.content_end_ms !== null || (updated.content_start_ms !== null && updated.content_start_ms > 0)) {
+          withSilence++;
+        }
+      } catch {
+        // continue on per-file error
+      }
+    }
+
+    setScanningFolder(null);
+    setScanningFile(null);
+
+    changeLogService.log(
+      "analyzed",
+      "audio_file",
+      currentFolder?.name ?? null,
+      `Análise concluída: ${filesToScan.length} arquivo(s) — ${withSilence} com silêncio detectado`,
+    );
+
+    if (withSilence > 0) {
+      toast.success(`${filesToScan.length} arquivo(s) analisado(s) — ${withSilence} com silêncio detectado`);
+    } else {
+      toast.success(`${filesToScan.length} arquivo(s) analisado(s) — nenhum silêncio significativo`);
+    }
+  };
 
   // ── Shuffle toggle ───────────────────────────────────────────────────────
   const handleToggleShuffle = async () => {
@@ -353,7 +460,7 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
       {dialog}
 
       {/* ── Toolbar ───────────────────────────────────────────────────────── */}
-      <div className="px-4 py-2.5 border-b bg-white flex items-center justify-between flex-shrink-0 gap-2">
+      <div className="px-4 py-2.5 border-b bg-white flex items-center flex-shrink-0 gap-2">
         {selectedIds.size > 0 ? (
           <div className="flex items-center gap-2 flex-1">
             <span className="text-sm text-slate-600 font-medium">
@@ -429,30 +536,50 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
             </Button>
           </div>
         ) : (
-          <span className="text-sm font-medium text-slate-600">
+          <span className="text-sm font-medium text-slate-600 flex-1">
             {folderFiles.length} arquivo(s)
           </span>
         )}
-        <button
-          onClick={handleToggleShuffle}
-          title={currentFolder?.shuffle ? "Modo aleatório (clique para ordenado)" : "Modo ordenado (clique para aleatório)"}
-          className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors flex-shrink-0 ${
-            currentFolder?.shuffle
-              ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
-              : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-          }`}
-        >
-          {currentFolder?.shuffle ? (
-            <Shuffle className="h-3.5 w-3.5" />
-          ) : (
-            <ArrowDownUp className="h-3.5 w-3.5" />
-          )}
-          {currentFolder?.shuffle ? "Aleatório" : "Em ordem"}
-        </button>
-        <Button size="sm" onClick={handleImport} className="flex-shrink-0">
-          <Upload className="h-3.5 w-3.5 mr-1.5" />
-          Importar
-        </Button>
+        <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+          <button
+            onClick={handleToggleShuffle}
+            title={currentFolder?.shuffle ? "Modo aleatório (clique para ordenado)" : "Modo ordenado (clique para aleatório)"}
+            className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors ${
+              currentFolder?.shuffle
+                ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
+                : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            {currentFolder?.shuffle ? (
+              <Shuffle className="h-3.5 w-3.5" />
+            ) : (
+              <ArrowDownUp className="h-3.5 w-3.5" />
+            )}
+            {currentFolder?.shuffle ? "Aleatório" : "Em ordem"}
+          </button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleScanSilence}
+            disabled={isScanning || folderFiles.length === 0 || scanningFolderId !== null}
+            title={
+              scanningFolderId !== null && !isScanning
+                ? "Outra pasta está sendo analisada"
+                : "Analisar silêncio inicial e final de todos os arquivos desta pasta"
+            }
+          >
+            {isScanning ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <ScanLine className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {isScanning ? "Analisando..." : "Analisar Silêncio"}
+          </Button>
+          <Button size="sm" onClick={handleImport}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Importar
+          </Button>
+        </div>
       </div>
 
       {/* ── File list ─────────────────────────────────────────────────────── */}
@@ -571,7 +698,10 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
                       </div>
                     ) : (
                       <>
-                        <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
+                          <SilenceBadge file={file} />
+                        </div>
                         <p className="text-xs text-slate-400 truncate">{file.filename}</p>
                       </>
                     )}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Plus, Edit2, Trash2, Clock, Search, X, CheckSquare, SlidersHorizontal,
+  Plus, Edit2, Trash2, Clock, Search, X, CheckSquare, SlidersHorizontal, Copy,
 } from "lucide-react";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Button } from "@/components/ui/button";
@@ -241,6 +241,15 @@ export function Schedules() {
   useEffect(() => { fetch(); }, [fetch]);
   useEffect(() => { fetchFolders(); }, [fetchFolders]);
 
+  // F5 → refresh schedules
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F5") { e.preventDefault(); fetch(); toast.info("Agendamentos atualizados"); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fetch]);
+
   const handleSave = async (data: ScheduleFormData) => {
     try {
       if (editing) {
@@ -279,6 +288,17 @@ export function Schedules() {
     try {
       await scheduleService.toggleActive(s.id, active);
       update({ ...s, is_active: active });
+    } catch (e) {
+      toast.error(`Erro: ${e}`);
+    }
+  };
+
+  const handleDuplicate = async (s: Schedule) => {
+    try {
+      const created = await scheduleService.duplicate(s.id);
+      add(created);
+      toast.success(`"${s.name || s.time}" duplicado`);
+      changeLogService.log("created", "schedule", created.name || created.time);
     } catch (e) {
       toast.error(`Erro: ${e}`);
     }
@@ -580,10 +600,13 @@ export function Schedules() {
                   {/* Actions */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Switch checked={s.is_active} onCheckedChange={(v) => handleToggle(s, v)} />
-                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setEditing(s); setModalOpen(true); }}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" onClick={() => { setEditing(s); setModalOpen(true); }}>
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(s)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500 hover:text-slate-700" title="Duplicar" onClick={() => handleDuplicate(s)}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" title="Remover" onClick={() => handleDelete(s)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

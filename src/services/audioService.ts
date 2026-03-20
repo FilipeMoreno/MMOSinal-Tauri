@@ -51,4 +51,12 @@ export const audioService = {
   async moveFile(fileId: number, targetFolderId: number): Promise<AudioFile> {
     return invoke<AudioFile>("move_audio_file", { fileId, targetFolderId });
   },
+
+  async analyzeFileSilence(fileId: number): Promise<AudioFile> {
+    return invoke<AudioFile>("analyze_file_silence", { fileId });
+  },
+
+  async scanFolderSilence(folderId: number): Promise<AudioFile[]> {
+    return invoke<AudioFile[]>("scan_folder_silence", { folderId });
+  },
 };

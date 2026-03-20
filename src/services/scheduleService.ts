@@ -29,4 +29,8 @@ export const scheduleService = {
   async getNextSignal(): Promise<NextSignal | null> {
     return invoke<NextSignal | null>("get_next_signal");
   },
+
+  async duplicate(id: number): Promise<Schedule> {
+    return invoke<Schedule>("duplicate_schedule", { id });
+  },
 };

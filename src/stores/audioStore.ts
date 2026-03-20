@@ -8,6 +8,10 @@ interface AudioStore {
   selectedFolderId: number | null;
   loading: boolean;
   error: string | null;
+  /** Folder currently being silence-scanned (persists across navigation) */
+  scanningFolderId: number | null;
+  /** File currently being silence-analyzed */
+  scanningFileId: number | null;
   fetchFolders: () => Promise<void>;
   fetchFiles: (folderId: number) => Promise<void>;
   selectFolder: (id: number | null) => void;
@@ -17,8 +21,11 @@ interface AudioStore {
   addFiles: (folderId: number, files: AudioFile[]) => void;
   removeFile: (folderId: number, fileId: number) => void;
   setFiles: (folderId: number, files: AudioFile[]) => void;
+  updateFile: (folderId: number, file: AudioFile) => void;
   moveFile: (fileId: number, sourceFolderId: number, targetFolderId: number, updatedFile: AudioFile) => void;
   renameFileInStore: (folderId: number, fileId: number, name: string) => void;
+  setScanningFolder: (folderId: number | null) => void;
+  setScanningFile: (fileId: number | null) => void;
 }
 
 export const useAudioStore = create<AudioStore>((set) => ({
@@ -27,6 +34,8 @@ export const useAudioStore = create<AudioStore>((set) => ({
   selectedFolderId: null,
   loading: false,
   error: null,
+  scanningFolderId: null,
+  scanningFileId: null,
 
   fetchFolders: async () => {
     set({ loading: true, error: null });
@@ -85,6 +94,16 @@ export const useAudioStore = create<AudioStore>((set) => ({
       files: { ...state.files, [folderId]: files },
     })),
 
+  updateFile: (folderId, file) =>
+    set((state) => ({
+      files: {
+        ...state.files,
+        [folderId]: (state.files[folderId] ?? []).map((f) =>
+          f.id === file.id ? file : f
+        ),
+      },
+    })),
+
   moveFile: (fileId, sourceFolderId, targetFolderId, updatedFile) =>
     set((state) => {
       const sourceFiles = (state.files[sourceFolderId] ?? []).filter((f) => f.id !== fileId);
@@ -107,4 +126,7 @@ export const useAudioStore = create<AudioStore>((set) => ({
         ),
       },
     })),
+
+  setScanningFolder: (folderId) => set({ scanningFolderId: folderId }),
+  setScanningFile: (fileId) => set({ scanningFileId: fileId }),
 }));

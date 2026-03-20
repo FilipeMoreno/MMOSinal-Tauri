@@ -7,6 +7,36 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.2] - 2026-03-20
+
+### Adicionado
+- **Detecção e skip de silêncio** — arquivos de áudio com silêncio no início e/ou final são analisados automaticamente e tratados de forma inteligente durante a reprodução:
+  - **Análise automática na importação** — ao importar um arquivo, o sistema analisa o silêncio inicial e final usando RMS por janelas de 50 ms. Silêncio mínimo de 1,5 s (limiar RMS < 0,01 ≈ −40 dB) é necessário para detecção.
+  - **Botão "Analisar Silêncio"** na Biblioteca — processa todos os arquivos de uma pasta, exibindo o progresso arquivo por arquivo em tempo real. O estado de análise persiste na navegação entre páginas.
+  - **Skip automático do silêncio inicial** — se um arquivo possui silêncio detectado no início e está sendo reproduzido do zero, o player salta diretamente para o início do conteúdo real.
+  - **Parada antecipada no silêncio final** — durante a reprodução, quando a posição atinge `content_end_ms`, o player para o sink e encadeia automaticamente o próximo arquivo (como se fosse um fim natural).
+  - **Seleção inteligente de arquivo** — `next_file_for_folder` trata arquivos com posição salva ≥ `content_end_ms` como "concluídos", evitando que o sistema retome um arquivo parado no trecho de silêncio final.
+  - **Badges por arquivo** na Biblioteca:
+    - Cinza "Não analisado" — arquivo ainda não foi analisado
+    - Verde "✓ Sem silêncio" — analisado, nenhum silêncio significativo detectado
+    - Âmbar "~silêncio (+X.Xs / −Y.Ys)" — silêncio detectado, com duração em segundos
+    - Azul "Analisando..." com spinner — arquivo sendo processado no momento
+  - **Registro no log de alterações** — início e conclusão de cada análise são registrados com nome da pasta e resultado.
+
+### Alterado
+- **Toolbar da Biblioteca** — botões "Em ordem/Aleatório", "Analisar Silêncio" e "Importar" agrupados e alinhados à direita.
+- **Log de alterações** — nova ação "Analisado" com badge violeta para registros de análise de silêncio.
+
+### Técnico (Rust)
+- Novo módulo `core/silence.rs` com função `analyze_silence()` usando Symphonia + `SampleBuffer<f32>` para decodificação em qualquer formato (MP3, WAV, FLAC, etc.).
+- Novas colunas `content_start_ms` e `content_end_ms` em `audio_files` via migration `ALTER TABLE`.
+- Novo campo `content_start_ms: Option<i64>` distingue "não analisado" (`null`) de "analisado sem silêncio" (`0`) e "tem silêncio inicial" (`> 0`).
+- Queries SELECT de `AudioFile` convertidas de `query_as!` (macro) para `sqlx::query_as` não-macro para incluir as novas colunas sem necessidade de atualizar o cache `.sqlx/`.
+- Novos comandos Tauri: `analyze_file_silence` (arquivo individual) e `scan_folder_silence` (pasta completa).
+- Store Zustand (`audioStore`) estendido com `scanningFolderId` e `scanningFileId` para persistência do estado de análise entre navegações.
+
+---
+
 ## [1.3.1] - 2026-03-20
 
 ### Adicionado
