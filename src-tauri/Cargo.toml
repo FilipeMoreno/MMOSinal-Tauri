@@ -1,6 +1,6 @@
 [package]
 name = "mmo-sinal-tauri"
-version = "1.2.9"
+version = "1.3.1"
 description = "Gerenciador de Sirenes Escolares"
 authors = ["MMO Sinal"]
 edition = "2021"
@@ -50,6 +50,7 @@ uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 tauri-plugin-updater = "2.10.0"
 tauri-plugin-process = "2.3.1"
+tauri-plugin-notification = "2"
 
 [profile.release]
 panic = "abort"

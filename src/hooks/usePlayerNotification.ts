@@ -1,4 +1,9 @@
 import { useEffect, useRef } from "react";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import { usePlayerStore } from "@/stores/playerStore";
 
 export function usePlayerNotification() {
@@ -6,21 +11,28 @@ export function usePlayerNotification() {
   const currentFile = usePlayerStore((s) => s.current_file);
   const currentSchedule = usePlayerStore((s) => s.current_schedule);
   const prevStatusRef = useRef(status);
+  const permissionRef = useRef<boolean>(false);
 
+  // Request permission once on mount
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
+    (async () => {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const result = await requestPermission();
+        granted = result === "granted";
+      }
+      permissionRef.current = granted;
+    })();
   }, []);
 
   useEffect(() => {
     const wasIdle = prevStatusRef.current === "idle";
     const isNowPlaying = status === "playing" || status === "fading_in";
 
-    if (wasIdle && isNowPlaying && "Notification" in window && Notification.permission === "granted") {
+    if (wasIdle && isNowPlaying && permissionRef.current) {
       const scheduleName = currentSchedule?.name?.trim() || currentSchedule?.time;
       const body = [currentFile?.name, scheduleName].filter(Boolean).join(" • ");
-      new Notification("▶ Sinal tocando", { body, silent: true });
+      sendNotification({ title: "▶ Sinal tocando", body, silent: true });
     }
 
     prevStatusRef.current = status;
