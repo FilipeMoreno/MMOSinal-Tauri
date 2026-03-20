@@ -5,8 +5,9 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
+use crate::core::audio_state::PlayerStatus;
 use crate::db::models::log::NewLog;
-use crate::db::repos::{audio_repo, holiday_repo, log_repo, schedule_repo, settings_repo};
+use crate::db::repos::{audio_repo, holiday_repo, log_repo, schedule_repo, seasonal_repo, settings_repo};
 use crate::core::player_engine::PlayerEngine;
 
 /// Converts chrono Weekday to our 1-7 scheme (1=Mon, 7=Sun)
@@ -75,12 +76,25 @@ pub async fn run_scheduler(
 
             info!("Firing schedule: {} at {}", schedule.name, schedule.time);
 
+            // Check seasonal override — substitutes folder_id when a period is active
+            let effective_folder_id = if schedule.folder_id.is_some() {
+                match seasonal_repo::get_active_for_date(&pool, &current_date).await {
+                    Some(ov) => {
+                        info!("Seasonal override '{}' active → folder {}", ov.name, ov.replacement_folder_id);
+                        Some(ov.replacement_folder_id)
+                    }
+                    None => schedule.folder_id,
+                }
+            } else {
+                schedule.folder_id
+            };
+
             // Determine which file to play
             let play_folder_id: Option<i64>;
             let file = if let Some(file_id) = schedule.audio_file_id {
                 play_folder_id = None;
                 audio_repo::get_file(&pool, file_id).await.ok().flatten()
-            } else if let Some(folder_id) = schedule.folder_id {
+            } else if let Some(folder_id) = effective_folder_id {
                 play_folder_id = Some(folder_id);
                 audio_repo::next_file_for_folder(&pool, folder_id).await
             } else {
@@ -137,6 +151,67 @@ pub async fn run_scheduler(
                     position_start_ms: None,
                     error_message: Some(e.to_string()),
                 }).await;
+            }
+        }
+    }
+}
+
+/// Watchdog task — runs every 5 s; if the player position stops advancing for
+/// 30 s while the status is non-Idle, forces a stop and logs the incident.
+pub async fn run_watchdog(
+    pool: SqlitePool,
+    engine: Arc<Mutex<PlayerEngine>>,
+    app: AppHandle,
+) {
+    use std::time::Instant;
+
+    // Clone the SharedPlayerState Arc so we can read it without holding the engine lock
+    let player_state = engine.lock().await.state.clone();
+
+    let mut last_pos: i64 = -1;
+    let mut stale_since: Option<Instant> = None;
+
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let (status, pos) = {
+            let st = player_state.lock().await;
+            (st.status.clone(), st.position_ms)
+        };
+
+        if matches!(status, PlayerStatus::Idle) {
+            last_pos = -1;
+            stale_since = None;
+            continue;
+        }
+
+        if pos != last_pos {
+            last_pos = pos;
+            stale_since = None;
+        } else {
+            let since = stale_since.get_or_insert_with(Instant::now);
+            if since.elapsed().as_secs() >= 30 {
+                warn!("Watchdog: player frozen at {}ms — forcing stop", pos);
+                let _ = log_repo::insert(&pool, &NewLog {
+                    schedule_id: None,
+                    audio_file_id: None,
+                    schedule_name: None,
+                    audio_name: None,
+                    trigger_type: "watchdog".to_string(),
+                    status: "error".to_string(),
+                    played_duration_ms: Some(0),
+                    position_start_ms: Some(pos),
+                    error_message: Some("Player travado detectado — reiniciado automaticamente".to_string()),
+                }).await;
+                let stopped = tokio::time::timeout(
+                    tokio::time::Duration::from_secs(3),
+                    async { engine.lock().await.stop(&pool, &app).await },
+                ).await;
+                if stopped.is_err() {
+                    warn!("Watchdog: timeout while stopping frozen player");
+                }
+                last_pos = -1;
+                stale_since = None;
             }
         }
     }

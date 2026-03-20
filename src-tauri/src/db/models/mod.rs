@@ -5,3 +5,4 @@ pub mod change_log;
 pub mod holiday;
 pub mod panic_button;
 pub mod settings;
+pub mod seasonal;

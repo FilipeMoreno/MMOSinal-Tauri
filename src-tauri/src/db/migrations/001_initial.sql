@@ -118,6 +118,19 @@ CREATE TABLE IF NOT EXISTS change_logs (
 -- ── Adição de coluna shuffle (segura para bancos existentes) ─────────────────
 ALTER TABLE audio_folders ADD COLUMN shuffle INTEGER NOT NULL DEFAULT 0;
 
+-- ── Períodos Sazonais ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS seasonal_overrides (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                  TEXT    NOT NULL,
+    replacement_folder_id INTEGER NOT NULL REFERENCES audio_folders(id) ON DELETE CASCADE,
+    start_month           INTEGER NOT NULL,  -- 1–12
+    start_day             INTEGER NOT NULL,  -- 1–31
+    end_month             INTEGER NOT NULL,
+    end_day               INTEGER NOT NULL,
+    is_active             INTEGER NOT NULL DEFAULT 1,
+    created_at            TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 -- ── Índices ──────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_schedules_active  ON schedules(is_active, time);
 CREATE INDEX IF NOT EXISTS idx_logs_triggered_at ON execution_logs(triggered_at DESC);

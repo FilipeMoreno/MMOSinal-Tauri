@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Save, FolderOpen, HardDrive, Zap, Plus, Trash2,
-  RefreshCw, Monitor, Wifi, Volume2, Upload, Download,
+  RefreshCw, Monitor, Wifi, Volume2, Upload, Download, Snowflake, Pencil,
 } from "lucide-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -23,10 +23,11 @@ import { configService } from "@/services/configService";
 import { changeLogService } from "@/services/changeLogService";
 import type { TimeSyncResult } from "@/types";
 import { panicService } from "@/services/panicService";
+import { seasonalService } from "@/services/seasonalService";
 import { useAudioStore } from "@/stores/audioStore";
 import { useSyncStore } from "@/stores/syncStore";
 import { useConfirm } from "@/hooks/useConfirm";
-import type { AppSettings, PanicButton, InterruptMode } from "@/types";
+import type { AppSettings, PanicButton, InterruptMode, SeasonalOverride, SeasonalOverrideFormData } from "@/types";
 import { toast } from "sonner";
 
 function Section({ icon: Icon, title, children }: {
@@ -115,6 +116,17 @@ export function Settings() {
   const [panicColor, setPanicColor] = useState("#ef4444");
   const [savingPanic, setSavingPanic] = useState(false);
 
+  // Seasonal overrides state
+  const [seasonalOverrides, setSeasonalOverrides] = useState<SeasonalOverride[]>([]);
+  const [seasonalModal, setSeasonalModal] = useState(false);
+  const [seasonalEditing, setSeasonalEditing] = useState<SeasonalOverride | null>(null);
+  const emptySeasonalForm = (): SeasonalOverrideFormData => ({
+    name: "", replacement_folder_id: 0,
+    start_month: 1, start_day: 1, end_month: 1, end_day: 31, is_active: true,
+  });
+  const [seasonalForm, setSeasonalForm] = useState<SeasonalOverrideFormData>(emptySeasonalForm());
+  const [savingSeasonal, setSavingSeasonal] = useState(false);
+
   const { folders, files, fetchFolders, fetchFiles, selectedFolderId, selectFolder } = useAudioStore();
   const setSynced = useSyncStore((s) => s.setSynced);
   const { confirm, dialog } = useConfirm();
@@ -123,15 +135,17 @@ export function Settings() {
     let mounted = true;
     const load = async () => {
       try {
-        const [savedSettings, buttons, autostartEnabled] = await Promise.all([
+        const [savedSettings, buttons, autostartEnabled, seasonal] = await Promise.all([
           settingsService.get(),
           panicService.list(),
           isAutostartEnabled().catch(() => null),
+          seasonalService.list(),
         ]);
         if (!mounted) return;
         setSettings({ ...savedSettings, start_with_os: autostartEnabled ?? savedSettings.start_with_os });
         setSavedKiosk(savedSettings.kiosk_mode);
         setPanicButtons(buttons);
+        setSeasonalOverrides(seasonal);
       } catch (e) {
         console.error(e);
       } finally {
@@ -264,6 +278,85 @@ export function Settings() {
     }
   };
 
+  const openSeasonalCreate = () => {
+    setSeasonalEditing(null);
+    setSeasonalForm(emptySeasonalForm());
+    setSeasonalModal(true);
+  };
+
+  const openSeasonalEdit = (ov: SeasonalOverride) => {
+    setSeasonalEditing(ov);
+    setSeasonalForm({
+      name: ov.name,
+      replacement_folder_id: ov.replacement_folder_id,
+      start_month: ov.start_month,
+      start_day: ov.start_day,
+      end_month: ov.end_month,
+      end_day: ov.end_day,
+      is_active: ov.is_active,
+    });
+    setSeasonalModal(true);
+  };
+
+  const handleSaveSeasonal = async () => {
+    if (!seasonalForm.name || !seasonalForm.replacement_folder_id) return;
+    setSavingSeasonal(true);
+    try {
+      if (seasonalEditing) {
+        const updated = await seasonalService.update(seasonalEditing.id, seasonalForm);
+        setSeasonalOverrides((prev) => prev.map((o) => o.id === updated.id ? updated : o));
+      } else {
+        const created = await seasonalService.create(seasonalForm);
+        setSeasonalOverrides((prev) => [...prev, created]);
+      }
+      setSeasonalModal(false);
+      toast.success(seasonalEditing ? "Período atualizado" : "Período criado");
+    } catch (e) {
+      toast.error(`Erro: ${e}`);
+    } finally {
+      setSavingSeasonal(false);
+    }
+  };
+
+  const handleDeleteSeasonal = async (id: number) => {
+    if (!await confirm({ message: "Remover este período sazonal?", confirmLabel: "Remover" })) return;
+    try {
+      await seasonalService.remove(id);
+      setSeasonalOverrides((prev) => prev.filter((o) => o.id !== id));
+      toast.success("Período removido");
+    } catch (e) {
+      toast.error(`Erro: ${e}`);
+    }
+  };
+
+  const handleToggleSeasonal = async (id: number, isActive: boolean) => {
+    try {
+      const updated = await seasonalService.toggle(id, isActive);
+      setSeasonalOverrides((prev) => prev.map((o) => o.id === updated.id ? updated : o));
+    } catch (e) {
+      toast.error(`Erro: ${e}`);
+    }
+  };
+
+  const isSeasonalActiveToday = (ov: SeasonalOverride): boolean => {
+    if (!ov.is_active) return false;
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const day   = now.getDate();
+    const cur   = month * 100 + day;
+    const start = ov.start_month * 100 + ov.start_day;
+    const end   = ov.end_month   * 100 + ov.end_day;
+    return start <= end ? (cur >= start && cur <= end) : (cur >= start || cur <= end);
+  };
+
+  const MONTHS = [
+    "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
+  ];
+
+  const setSF = <K extends keyof SeasonalOverrideFormData>(k: K, v: SeasonalOverrideFormData[K]) =>
+    setSeasonalForm((f) => ({ ...f, [k]: v }));
+
   return (
     <div className="p-6 w-full space-y-5">
       {dialog}
@@ -366,6 +459,64 @@ export function Settings() {
             >
               <Plus className="h-4 w-4 mr-1.5" />
               Novo botão de acionamento
+            </Button>
+          </Section>
+
+          <Section icon={Snowflake} title="Músicas Sazonais">
+            {seasonalOverrides.length === 0 ? (
+              <div className="text-center py-6 text-slate-400">
+                <Snowflake className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Nenhum período sazonal configurado</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {seasonalOverrides.map((ov) => {
+                  const folder = folders.find((f) => f.id === ov.replacement_folder_id);
+                  const activeToday = isSeasonalActiveToday(ov);
+                  return (
+                    <div key={ov.id} className="flex items-start gap-3 p-3 rounded-lg border bg-slate-50 hover:bg-white transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-sm text-slate-800">{ov.name}</p>
+                          {activeToday && (
+                            <span className="text-[10px] font-bold uppercase bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded">
+                              Ativo hoje
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {String(ov.start_day).padStart(2,"0")}/{String(ov.start_month).padStart(2,"0")}
+                          {" → "}
+                          {String(ov.end_day).padStart(2,"0")}/{String(ov.end_month).padStart(2,"0")}
+                          {folder ? ` · ${folder.name}` : ""}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={ov.is_active}
+                        onCheckedChange={(v) => handleToggleSeasonal(ov.id, v)}
+                        className="mt-0.5 flex-shrink-0"
+                      />
+                      <Button
+                        size="icon" variant="ghost" className="h-8 w-8 flex-shrink-0"
+                        onClick={() => openSeasonalEdit(ov)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost"
+                        className="h-8 w-8 text-destructive hover:text-destructive flex-shrink-0"
+                        onClick={() => handleDeleteSeasonal(ov.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <Button size="sm" variant="outline" onClick={openSeasonalCreate} className="w-full border-dashed">
+              <Plus className="h-4 w-4 mr-1.5" />
+              Novo período sazonal
             </Button>
           </Section>
 
@@ -575,6 +726,111 @@ export function Settings() {
             <Button variant="outline" onClick={() => setPanicModal(false)}>Cancelar</Button>
             <Button onClick={handleSavePanic} disabled={savingPanic || !panicName || !panicFileId}>
               {savingPanic ? "Salvando..." : "Criar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Seasonal Modal */}
+      <Dialog open={seasonalModal} onOpenChange={setSeasonalModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{seasonalEditing ? "Editar período sazonal" : "Novo período sazonal"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Nome</Label>
+              <Input
+                value={seasonalForm.name}
+                onChange={(e) => setSF("name", e.target.value)}
+                placeholder="Ex: Natal"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Pasta substituta</Label>
+              <Select
+                value={seasonalForm.replacement_folder_id ? seasonalForm.replacement_folder_id.toString() : ""}
+                onValueChange={(v) => setSF("replacement_folder_id", Number(v))}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecione uma pasta..." /></SelectTrigger>
+                <SelectContent>
+                  {folders.map((f) => (
+                    <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Data de início</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={seasonalForm.start_day.toString()}
+                    onValueChange={(v) => setSF("start_day", Number(v))}
+                  >
+                    <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <SelectItem key={d} value={d.toString()}>{String(d).padStart(2,"0")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={seasonalForm.start_month.toString()}
+                    onValueChange={(v) => setSF("start_month", Number(v))}
+                  >
+                    <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((m, i) => (
+                        <SelectItem key={i+1} value={(i+1).toString()}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data de fim</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={seasonalForm.end_day.toString()}
+                    onValueChange={(v) => setSF("end_day", Number(v))}
+                  >
+                    <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <SelectItem key={d} value={d.toString()}>{String(d).padStart(2,"0")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={seasonalForm.end_month.toString()}
+                    onValueChange={(v) => setSF("end_month", Number(v))}
+                  >
+                    <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((m, i) => (
+                        <SelectItem key={i+1} value={(i+1).toString()}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <ToggleRow
+              label="Ativo"
+              description="Período será considerado pelo scheduler quando ativo"
+              checked={seasonalForm.is_active}
+              onCheckedChange={(v) => setSF("is_active", v)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSeasonalModal(false)}>Cancelar</Button>
+            <Button
+              onClick={handleSaveSeasonal}
+              disabled={savingSeasonal || !seasonalForm.name || !seasonalForm.replacement_folder_id}
+            >
+              {savingSeasonal ? "Salvando..." : seasonalEditing ? "Salvar" : "Criar"}
             </Button>
           </DialogFooter>
         </DialogContent>

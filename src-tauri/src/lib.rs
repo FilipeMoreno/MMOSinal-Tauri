@@ -16,7 +16,7 @@ use core::{
     audio_state::new_shared_state,
     backup::run_auto_backup,
     player_engine::PlayerEngine,
-    scheduler::run_scheduler,
+    scheduler::{run_scheduler, run_watchdog},
 };
 use db::{
     connection::create_pool,
@@ -131,6 +131,14 @@ pub fn run() {
                 run_scheduler(pool_sched, engine_sched, handle_sched).await;
             });
 
+            // Start player watchdog
+            let pool_wd = pool.clone();
+            let engine_wd = engine.clone();
+            let handle_wd = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                run_watchdog(pool_wd, engine_wd, handle_wd).await;
+            });
+
             // Start auto-backup if enabled
             if settings.backup_auto_enabled && !settings.backup_folder.is_empty() {
                 let backup_dest = PathBuf::from(&settings.backup_folder);
@@ -236,6 +244,7 @@ pub fn run() {
             commands::schedule::delete_schedule,
             commands::schedule::toggle_schedule_active,
             commands::schedule::get_next_signal,
+            commands::schedule::duplicate_schedule,
             // Player
             commands::player::get_player_state,
             commands::player::stop_player,
@@ -269,6 +278,12 @@ pub fn run() {
             commands::settings::import_config,
             // Time Sync
             commands::timesync::sync_time,
+            // Seasonal Overrides
+            commands::seasonal::list_seasonal_overrides,
+            commands::seasonal::create_seasonal_override,
+            commands::seasonal::update_seasonal_override,
+            commands::seasonal::delete_seasonal_override,
+            commands::seasonal::toggle_seasonal_override,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

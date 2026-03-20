@@ -133,6 +133,30 @@ export interface NextSignal {
   seconds_until: number;
 }
 
+// ─── Seasonal Overrides ───────────────────────────────────────────────────────
+
+export interface SeasonalOverride {
+  id: number;
+  name: string;
+  replacement_folder_id: number;
+  start_month: number; // 1–12
+  start_day: number;   // 1–31
+  end_month: number;
+  end_day: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface SeasonalOverrideFormData {
+  name: string;
+  replacement_folder_id: number;
+  start_month: number;
+  start_day: number;
+  end_month: number;
+  end_day: number;
+  is_active: boolean;
+}
+
 // ─── Backup ──────────────────────────────────────────────────────────────────
 
 export interface BackupResult {

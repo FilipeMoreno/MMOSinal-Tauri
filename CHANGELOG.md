@@ -7,6 +7,31 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.1] - 2026-03-20
+
+### Adicionado
+- **Músicas Sazonais** — cadastre períodos sazonais (ex: "Natal": 20/12 → 05/01) com uma pasta substituta. Durante o período ativo, todos os agendamentos configurados com **pasta** passam a tocar arquivos da pasta sazonal automaticamente, sem precisar editar cada agendamento. Agendamentos com arquivo específico não são afetados.
+  - Suporte a virada de ano (ex: 20/Dez → 05/Jan).
+  - Múltiplos períodos podem ser cadastrados; apenas o primeiro ativo é aplicado.
+  - Toggle ativo/inativo por período; badge "ATIVO HOJE" na interface.
+  - CRUD completo na página de Configurações (seção "Músicas Sazonais").
+
+---
+
+## [1.3.0] - 2026-03-20
+
+### Adicionado
+- **Duplicar agendamento** — botão de cópia (ícone duplo) em cada agendamento; cria uma cópia inativa com o nome "Cópia de [nome]".
+- **Watchdog do player** — tarefa em segundo plano detecta player travado (posição parada por 30 s) e força parada automática, registrando o incidente nos logs.
+- **Log de erro de dispositivo de áudio** — erros de desconexão do dispositivo de áudio agora emitem uma notificação toast imediata na interface, além de serem registrados nos logs de execução.
+- **Atalhos de teclado** — `Espaço` para parar o player (quando fora de campos de texto); `F5` na página de Agendamentos para atualizar a lista; `Ctrl+M` para abrir o sinal manual de qualquer página.
+- **Markdown no diálogo de atualização** — as notas da versão agora são renderizadas com formatação (títulos, listas, código inline, negrito).
+
+### Corrigido
+- Atalho `Ctrl+M` não abria o sinal manual indevidamente ao navegar para o Dashboard pelo menu lateral.
+
+---
+
 ## [1.2.9] - 2026-03-19
 
 ### Corrigido

@@ -8,3 +8,4 @@ pub mod backup;
 pub mod settings;
 pub mod panic;
 pub mod timesync;
+pub mod seasonal;

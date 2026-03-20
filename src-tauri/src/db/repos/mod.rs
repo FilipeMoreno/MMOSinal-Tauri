@@ -6,3 +6,4 @@ pub mod holiday_repo;
 pub mod panic_repo;
 pub mod settings_repo;
 pub mod playback_repo;
+pub mod seasonal_repo;
