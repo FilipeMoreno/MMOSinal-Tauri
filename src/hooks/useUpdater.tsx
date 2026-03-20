@@ -136,6 +136,22 @@ export function useUpdater() {
     }
   };
 
+  /** Verifica e instala silenciosamente, sem abrir dialog. Usado quando auto_update está ativo. */
+  const checkAndAutoInstall = useCallback(async () => {
+    try {
+      const update = await check();
+      setChecked(true);
+      if (!update?.available) return;
+      const toastId = toast.loading(`Atualização v${update.version} encontrada — instalando...`);
+      setInstalling(true);
+      await update.downloadAndInstall();
+      toast.success(`v${update.version} instalada! Reiniciando...`, { id: toastId });
+      await relaunch();
+    } catch {
+      // silencioso — falhas de rede na inicialização não devem incomodar o usuário
+    }
+  }, []);
+
   const dialog = updateInfo && dialogOpen ? (
     <Dialog open onOpenChange={(o) => !o && !installing && setDialogOpen(false)}>
       <DialogContent className="max-w-md p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
@@ -208,5 +224,6 @@ export function useUpdater() {
     // Abre o dialog novamente sem re-checar
     dismissUpdate: () => setDialogOpen(false),
     showUpdateDialog: () => setDialogOpen(true),
+    checkAndAutoInstall,
   };
 }

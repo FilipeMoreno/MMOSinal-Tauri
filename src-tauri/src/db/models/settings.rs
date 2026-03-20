@@ -43,6 +43,9 @@ pub struct AppSettings {
     /// Exibe mini player flutuante ao minimizar a janela principal
     #[serde(default = "default_true")]
     pub mini_player_enabled: bool,
+    /// Instala atualizações automaticamente ao iniciar o app, sem exibir dialog
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
 }
 
 fn default_backup_interval() -> u32 { 24 }
@@ -63,6 +66,7 @@ impl Default for AppSettings {
             kiosk_mode: false,
             kiosk_start: false,
             mini_player_enabled: true,
+            auto_update: true,
         }
     }
 }

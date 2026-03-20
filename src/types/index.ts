@@ -184,6 +184,7 @@ export interface AppSettings {
   kiosk_mode: boolean;
   kiosk_start: boolean;
   mini_player_enabled: boolean;
+  auto_update: boolean;
 }
 
 export interface ImportResult {

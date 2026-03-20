@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.5] - 2026-03-20
+
+### Adicionado
+- **Atualização automática** — nova opção nas Configurações (Sistema). Quando ativada (padrão), o app verifica e instala atualizações silenciosamente ao iniciar, sem exibir dialog de confirmação. Quando desativada, mantém o comportamento anterior (dialog com botão "Instalar e reiniciar").
+
+---
+
 ## [1.3.4] - 2026-03-20
 
 ### Corrigido

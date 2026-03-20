@@ -103,6 +103,7 @@ export function Settings() {
     kiosk_mode: false,
     kiosk_start: false,
     mini_player_enabled: true,
+    auto_update: true,
   });
   const [savedKiosk, setSavedKiosk] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -551,6 +552,13 @@ export function Settings() {
               description="Exibe um card flutuante com o próximo sinal ou player ao minimizar a janela"
               checked={settings.mini_player_enabled}
               onCheckedChange={(v) => set("mini_player_enabled", v)}
+            />
+            <div className="h-px bg-slate-100" />
+            <ToggleRow
+              label="Atualização automática"
+              description="Instala atualizações silenciosamente ao abrir o app, sem solicitar confirmação"
+              checked={settings.auto_update}
+              onCheckedChange={(v) => set("auto_update", v)}
             />
             <div className="h-px bg-slate-100" />
             <ToggleRow
