@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useUpdater } from "@/hooks/useUpdater";
 import { usePlayerNotification } from "@/hooks/usePlayerNotification";
+import { settingsService } from "@/services/backupService";
 import {
   LayoutDashboard, Clock, Music2, CalendarOff, FileText, Settings, Radio,
   ChevronLeft, ChevronRight, BookOpen,
@@ -75,7 +76,7 @@ function NavItem({
 export function Layout() {
   const { initListener, status, current_file, current_schedule } = usePlayerStore();
   const {
-    checkForUpdates, dialog: updateDialog,
+    checkForUpdates, checkAndAutoInstall, dialog: updateDialog,
     hasUpdate, updateVersion,
   } = useUpdater();
   const [version, setVersion] = useState("");
@@ -91,8 +92,16 @@ export function Layout() {
   }, []);
 
   useEffect(() => {
-    checkForUpdates(true);
     import("@tauri-apps/api/app").then(({ getVersion }) => getVersion().then(setVersion));
+    settingsService.get().then((s) => {
+      if (s.auto_update) {
+        checkAndAutoInstall();
+      } else {
+        checkForUpdates(true);
+      }
+    }).catch(() => {
+      checkForUpdates(true);
+    });
   }, []);
 
   usePlayerNotification();

@@ -16,7 +16,6 @@ import { MiniPlayer } from "@/pages/MiniPlayer";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { settingsService } from "@/services/backupService";
 import { playerService } from "@/services/playerService";
-import { useUpdater } from "@/hooks/useUpdater";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useUiStore } from "@/stores/uiStore";
 
@@ -64,21 +63,13 @@ function MainApp() {
   const [miniPlayerEnabled, setMiniPlayerEnabled] = useState(true);
   const [ready, setReady] = useState(false);
 
-  const { checkForUpdates, checkAndAutoInstall, dialog: updateDialog } = useUpdater();
-
   useEffect(() => {
     settingsService.get().then((s) => {
       setShowOnboarding(!s.setup_complete);
       setMiniPlayerEnabled(s.mini_player_enabled);
       setReady(true);
-      if (s.auto_update) {
-        checkAndAutoInstall();
-      } else {
-        checkForUpdates(true);
-      }
     }).catch(() => {
       setReady(true);
-      checkForUpdates(true);
     });
   }, []);
 
@@ -149,7 +140,6 @@ function MainApp() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" richColors />
-      {updateDialog}
       <GlobalShortcuts />
       {showOnboarding && (
         <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
