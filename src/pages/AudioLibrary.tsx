@@ -8,13 +8,21 @@ import { toast } from "sonner";
 export function AudioLibrary() {
   const { fetchFolders, folders, selectedFolderId, moveFile: moveFileInStore } = useAudioStore();
   const [draggingFileId, setDraggingFileId] = useState<number | null>(null);
+  const [draggingSourceFolderId, setDraggingSourceFolderId] = useState<number | null>(null);
+  const [draggingTargetFolderId, setDraggingTargetFolderId] = useState<number | null>(null);
 
   useEffect(() => { fetchFolders(); }, [fetchFolders]);
 
-  const handleFileDrop = async (targetFolderId: number, fileId: number) => {
-    if (selectedFolderId === null || selectedFolderId === targetFolderId) return;
-    const sourceFolderId = selectedFolderId;
+  const handleFileDrop = async (
+    targetFolderId: number,
+    fileId: number,
+    sourceFolderIdFromDrag: number | null,
+  ) => {
+    const sourceFolderId = sourceFolderIdFromDrag ?? draggingSourceFolderId ?? selectedFolderId;
+    if (sourceFolderId === null || sourceFolderId === targetFolderId) return;
     setDraggingFileId(null);
+    setDraggingSourceFolderId(null);
+    setDraggingTargetFolderId(null);
     try {
       const updated = await audioService.moveFile(fileId, targetFolderId);
       moveFileInStore(fileId, sourceFolderId, targetFolderId, updated);
@@ -31,10 +39,18 @@ export function AudioLibrary() {
         <p className="text-sm text-slate-500 mt-0.5">Gerencie pastas e arquivos de áudio para os sinais</p>
       </div>
       <div className="flex flex-1 overflow-hidden">
-        <FolderSidebar onFileDrop={handleFileDrop} />
+        <FolderSidebar
+          draggingFileId={draggingFileId}
+          draggingSourceFolderId={draggingSourceFolderId}
+          draggingTargetFolderId={draggingTargetFolderId}
+          onFileDrop={handleFileDrop}
+        />
         <AudioFileList
           draggingFileId={draggingFileId}
           setDraggingFileId={setDraggingFileId}
+          setDraggingSourceFolderId={setDraggingSourceFolderId}
+          setDraggingTargetFolderId={setDraggingTargetFolderId}
+          onFileDropToFolder={handleFileDrop}
           currentFolder={folders.find((f) => f.id === selectedFolderId) ?? null}
         />
       </div>

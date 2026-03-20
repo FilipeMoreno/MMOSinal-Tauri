@@ -43,6 +43,12 @@
   -webkit-app-region: drag;
 }
 
+/* Keep HTML drag-and-drop working inside the webview */
+[draggable="true"] {
+  -webkit-user-drag: element;
+  -webkit-app-region: no-drag;
+}
+
 /* Scrollbar estilizada */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Music, Trash2, RotateCcw, Upload, GripVertical, MoreVertical,
-  Edit2, FolderInput, Check, X, Shuffle, ArrowDownUp, ScanLine, Loader2,
+  Edit2, FolderInput, Check, X, Shuffle, ArrowDownUp, ScanLine, Loader2, Eye, EyeOff,
 } from "lucide-react";
 import { useConfirm } from "@/hooks/useConfirm";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -18,6 +18,9 @@ import type { AudioFile, AudioFolder } from "@/types";
 interface Props {
   draggingFileId: number | null;
   setDraggingFileId: (id: number | null) => void;
+  setDraggingSourceFolderId: (id: number | null) => void;
+  setDraggingTargetFolderId: (id: number | null) => void;
+  onFileDropToFolder: (targetFolderId: number, fileId: number, sourceFolderId: number | null) => void;
   currentFolder: AudioFolder | null;
 }
 
@@ -37,14 +40,20 @@ function msToS(ms: number): string {
   return (ms / 1000).toFixed(1) + "s";
 }
 
-function SilenceBadge({ file }: { file: AudioFile }) {
+function SilenceBadge({ file, compact = false }: { file: AudioFile; compact?: boolean }) {
   const scanningFileId = useAudioStore((s) => s.scanningFileId);
+  const baseClass = compact
+    ? "flex-shrink-0 h-5 w-5 rounded inline-flex items-center justify-center"
+    : "flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium leading-none inline-flex items-center gap-1";
 
   if (scanningFileId === file.id) {
     return (
-      <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 border border-blue-200 font-medium leading-none flex items-center gap-1">
-        <Loader2 className="h-2.5 w-2.5 animate-spin" />
-        Analisando...
+      <span
+        className={cn(baseClass, "bg-blue-50 text-blue-500 border border-blue-200")}
+        title="Analisando silêncio..."
+      >
+        <Loader2 className={cn("animate-spin", compact ? "h-3 w-3" : "h-2.5 w-2.5")} />
+        {!compact && "Analisando..."}
       </span>
     );
   }
@@ -58,16 +67,22 @@ function SilenceBadge({ file }: { file: AudioFile }) {
 
   if (!isAnalyzed) {
     return (
-      <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 font-medium leading-none">
-        Não analisado
+      <span
+        className={cn(baseClass, "bg-slate-100 text-slate-400")}
+        title="Não analisado"
+      >
+        {compact ? <ScanLine className="h-3 w-3" /> : "Não analisado"}
       </span>
     );
   }
 
   if (!hasLeadingSilence && !hasTrailingSilence) {
     return (
-      <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 border border-green-200 font-medium leading-none">
-        ✓ Sem silêncio
+      <span
+        className={cn(baseClass, "bg-green-50 text-green-600 border border-green-200")}
+        title="Sem silêncio detectado"
+      >
+        {compact ? <Check className="h-3 w-3" /> : "✓ Sem silêncio"}
       </span>
     );
   }
@@ -81,15 +96,22 @@ function SilenceBadge({ file }: { file: AudioFile }) {
 
   return (
     <span
-      className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 font-medium leading-none"
+      className={cn(baseClass, "bg-amber-50 text-amber-600 border border-amber-200")}
       title={`Silêncio — início: ${msToS(file.content_start_ms ?? 0)}, fim do conteúdo: ${file.content_end_ms != null ? msToS(file.content_end_ms) : "até o fim"}`}
     >
-      ~silêncio{parts.length > 0 ? ` (${parts.join(", ")})` : ""}
+      {compact ? <ScanLine className="h-3 w-3" /> : `~silêncio${parts.length > 0 ? ` (${parts.join(", ")})` : ""}`}
     </span>
   );
 }
 
-export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder }: Props) {
+export function AudioFileList({
+  draggingFileId,
+  setDraggingFileId,
+  setDraggingSourceFolderId,
+  setDraggingTargetFolderId,
+  onFileDropToFolder,
+  currentFolder,
+}: Props) {
   const {
     selectedFolderId,
     folders,
@@ -103,6 +125,7 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
     renameFileInStore,
     updateFolder,
     scanningFolderId,
+    scanningFileId,
     setScanningFolder,
     setScanningFile,
   } = useAudioStore();
@@ -117,6 +140,10 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
   const dragIndexRef = useRef<number | null>(null);
   // insertBefore: the item at this index gets the line drawn ABOVE it (insert before it)
   const [insertBeforeIndex, setInsertBeforeIndex] = useState<number | null>(null);
+  const pointerDragRef = useRef<{ fileId: number; sourceFolderId: number; fromIndex: number } | null>(null);
+  const [pointerDragging, setPointerDragging] = useState(false);
+  const fileListContainerRef = useRef<HTMLDivElement>(null);
+  const [dragPreview, setDragPreview] = useState<{ x: number; y: number; name: string } | null>(null);
 
   // ── Multi-select state ───────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -132,6 +159,10 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
   const [movePicker, setMovePicker] = useState<MovePickerState | null>(null);
   const [bulkMovePicker, setBulkMovePicker] = useState(false);
   const bulkMoveButtonRef = useRef<HTMLButtonElement>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [showSilenceBadge, setShowSilenceBadge] = useState<boolean>(
+    () => localStorage.getItem("audio-show-silence-badge") !== "false"
+  );
 
   // Close context menu + move picker when clicking outside
   useEffect(() => {
@@ -143,6 +174,9 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
       if (!target.closest("[data-move-picker]") && !target.closest("[data-move-trigger]")) {
         setMovePicker(null);
         setBulkMovePicker(false);
+      }
+      if (!target.closest("[data-actions-menu]") && !target.closest("[data-actions-trigger]")) {
+        setActionsMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -160,6 +194,10 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
   useEffect(() => {
     if (folderId) fetchFiles(folderId);
   }, [folderId, fetchFiles]);
+
+  useEffect(() => {
+    localStorage.setItem("audio-show-silence-badge", String(showSilenceBadge));
+  }, [showSilenceBadge]);
 
   // ── Silence scan (per-file, progressive) ─────────────────────────────────
   const handleScanSilence = async () => {
@@ -203,6 +241,23 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
       toast.success(`${filesToScan.length} arquivo(s) analisado(s) — ${withSilence} com silêncio detectado`);
     } else {
       toast.success(`${filesToScan.length} arquivo(s) analisado(s) — nenhum silêncio significativo`);
+    }
+  };
+
+  const handleAnalyzeSingle = async (file: AudioFile) => {
+    if (!folderId || scanningFolderId !== null) return;
+    setContextMenu(null);
+    setScanningFile(file.id);
+    try {
+      const updated = await audioService.analyzeFileSilence(file.id);
+      updateFile(folderId, updated);
+      const hasSilence = updated.content_end_ms !== null || (updated.content_start_ms !== null && updated.content_start_ms > 0);
+      toast.success(hasSilence ? "Análise concluída: silêncio detectado" : "Análise concluída: sem silêncio");
+      changeLogService.log("analyzed", "audio_file", file.name, "Análise individual de silêncio");
+    } catch (e) {
+      toast.error(`Erro ao analisar: ${e}`);
+    } finally {
+      setScanningFile(null);
     }
   };
 
@@ -357,40 +412,20 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
     }
   };
 
-  // ── Drag-reorder (within folder) ─────────────────────────────────────────
-  const handleDragStart = (e: React.DragEvent, index: number, file: AudioFile) => {
-    dragIndexRef.current = index;
-    setDraggingFileId(file.id);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(file.id));
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
-    // Determine insert position: top half → insert before this row, bottom half → insert after
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const insertBefore = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
-    setInsertBeforeIndex(insertBefore);
-  };
-
-  const handleDragEnd = () => {
+  // ── Pointer-drag (stable in Tauri WebView) ───────────────────────────────
+  const clearPointerDrag = () => {
+    pointerDragRef.current = null;
     dragIndexRef.current = null;
     setInsertBeforeIndex(null);
     setDraggingFileId(null);
+    setDraggingSourceFolderId(null);
+    setDraggingTargetFolderId(null);
+    setDragPreview(null);
+    setPointerDragging(false);
   };
 
-  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const fromIndex = dragIndexRef.current;
-    const target = insertBeforeIndex;
-    dragIndexRef.current = null;
-    setInsertBeforeIndex(null);
-    setDraggingFileId(null);
-
-    if (fromIndex === null || target === null || !folderId) return;
+  const commitReorder = async (fromIndex: number, target: number) => {
+    if (!folderId) return;
     // Normalize: inserting after fromIndex is same as inserting before fromIndex+1
     const effectiveTarget = target > fromIndex ? target - 1 : target;
     if (effectiveTarget === fromIndex) return;
@@ -407,6 +442,115 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
       fetchFiles(folderId);
     }
   };
+
+  const parseIndex = (value: string | undefined): number | null => {
+    if (!value) return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const getFolderIdFromPoint = (x: number, y: number): number | null => {
+    const target = document.elementFromPoint(x, y);
+    if (!(target instanceof HTMLElement)) return null;
+    const row = target.closest<HTMLElement>("[data-folder-id]");
+    return parseIndex(row?.dataset.folderId);
+  };
+
+  const getInsertBeforeFromPoint = (x: number, y: number): number | null => {
+    const target = document.elementFromPoint(x, y);
+    if (!(target instanceof HTMLElement)) return null;
+
+    const row = target.closest<HTMLElement>("[data-file-index]");
+    if (row) {
+      const idx = parseIndex(row.dataset.fileIndex);
+      if (idx === null) return null;
+      const rect = row.getBoundingClientRect();
+      return y < rect.top + rect.height / 2 ? idx : idx + 1;
+    }
+
+    const listEl = fileListContainerRef.current;
+    if (!listEl || !listEl.contains(target)) return null;
+
+    const rows = Array.from(listEl.querySelectorAll<HTMLElement>("[data-file-index]"));
+    if (rows.length === 0) return 0;
+    const firstRect = rows[0].getBoundingClientRect();
+    const lastRect = rows[rows.length - 1].getBoundingClientRect();
+    if (y < firstRect.top) return 0;
+    if (y > lastRect.bottom) return rows.length;
+    return null;
+  };
+
+  const handlePointerDragStart = (e: React.PointerEvent, index: number, file: AudioFile) => {
+    if (e.button !== 0 || folderId === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    pointerDragRef.current = { fileId: file.id, sourceFolderId: folderId, fromIndex: index };
+    dragIndexRef.current = index;
+    setDraggingFileId(file.id);
+    setDraggingSourceFolderId(folderId);
+    setDraggingTargetFolderId(null);
+    setDragPreview({ x: e.clientX, y: e.clientY, name: file.name });
+    setInsertBeforeIndex(index);
+    setPointerDragging(true);
+  };
+
+  useEffect(() => {
+    if (!pointerDragging) return;
+
+    const onPointerMove = (e: PointerEvent) => {
+      const targetFolderId = getFolderIdFromPoint(e.clientX, e.clientY);
+      setDraggingTargetFolderId(targetFolderId);
+      setDragPreview((prev) => (prev ? { ...prev, x: e.clientX, y: e.clientY } : null));
+
+      const insertBefore = getInsertBeforeFromPoint(e.clientX, e.clientY);
+      if (insertBefore !== null) {
+        setInsertBeforeIndex(insertBefore);
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      const drag = pointerDragRef.current;
+      if (!drag) {
+        clearPointerDrag();
+        return;
+      }
+
+      const targetFolderId = getFolderIdFromPoint(e.clientX, e.clientY);
+      if (targetFolderId !== null && targetFolderId !== drag.sourceFolderId) {
+        onFileDropToFolder(targetFolderId, drag.fileId, drag.sourceFolderId);
+        clearPointerDrag();
+        return;
+      }
+
+      if (folderId !== null && folderId === drag.sourceFolderId) {
+        const target = getInsertBeforeFromPoint(e.clientX, e.clientY);
+        if (target !== null) {
+          void commitReorder(drag.fromIndex, target);
+        }
+      }
+
+      clearPointerDrag();
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [pointerDragging, folderId, onFileDropToFolder]);
+
+  useEffect(() => {
+    if (!pointerDragging) return;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.cursor = "grabbing";
+    return () => {
+      document.body.style.cursor = prevCursor;
+    };
+  }, [pointerDragging]);
 
   // ── Checkbox select ──────────────────────────────────────────────────────
   const toggleSelect = (fileId: number) => {
@@ -431,7 +575,7 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
     e.preventDefault();
     setMovePicker(null);
     const menuW = 168;
-    const menuH = 160;
+    const menuH = 220;
     const x = Math.min(e.clientX, window.innerWidth - menuW - 8);
     const y = Math.min(e.clientY, window.innerHeight - menuH - 8);
     setContextMenu({ fileId, x, y });
@@ -540,43 +684,78 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
             {folderFiles.length} arquivo(s)
           </span>
         )}
-        <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+        <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
           <button
             onClick={handleToggleShuffle}
             title={currentFolder?.shuffle ? "Modo aleatório (clique para ordenado)" : "Modo ordenado (clique para aleatório)"}
-            className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors ${
-              currentFolder?.shuffle
-                ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
-                : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-            }`}
+            className={`flex items-center gap-1 h-7 px-2 rounded-md text-[11px] font-medium border transition-colors ${currentFolder?.shuffle
+              ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
+              : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
           >
             {currentFolder?.shuffle ? (
-              <Shuffle className="h-3.5 w-3.5" />
+              <Shuffle className="h-3 w-3" />
             ) : (
-              <ArrowDownUp className="h-3.5 w-3.5" />
+              <ArrowDownUp className="h-3 w-3" />
             )}
             {currentFolder?.shuffle ? "Aleatório" : "Em ordem"}
           </button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleScanSilence}
-            disabled={isScanning || folderFiles.length === 0 || scanningFolderId !== null}
-            title={
-              scanningFolderId !== null && !isScanning
-                ? "Outra pasta está sendo analisada"
-                : "Analisar silêncio inicial e final de todos os arquivos desta pasta"
-            }
-          >
-            {isScanning ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <ScanLine className="h-3.5 w-3.5 mr-1.5" />
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[11px] gap-1"
+              data-actions-trigger
+              onClick={() => setActionsMenuOpen((v) => !v)}
+            >
+              <MoreVertical className="h-3 w-3" />
+              Ações
+            </Button>
+            {actionsMenuOpen && (
+              <div
+                data-actions-menu
+                className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[180px]"
+              >
+                <button
+                  className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    handleScanSilence();
+                  }}
+                  disabled={isScanning || folderFiles.length === 0 || scanningFolderId !== null}
+                  title={
+                    scanningFolderId !== null && !isScanning
+                      ? "Outra pasta está sendo analisada"
+                      : "Analisar silêncio inicial e final de todos os arquivos desta pasta"
+                  }
+                >
+                  {isScanning ? (
+                    <Loader2 className="h-3.5 w-3.5 text-slate-400 animate-spin" />
+                  ) : (
+                    <ScanLine className="h-3.5 w-3.5 text-slate-400" />
+                  )}
+                  {isScanning ? "Analisando..." : "Analisar Silêncio"}
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    setShowSilenceBadge((v) => !v);
+                  }}
+                  title="Mostrar ou ocultar o texto da badge de silêncio"
+                >
+                  {showSilenceBadge ? (
+                    <EyeOff className="h-3.5 w-3.5 text-slate-400" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5 text-slate-400" />
+                  )}
+                  {showSilenceBadge ? "Ocultar texto da badge" : "Mostrar texto da badge"}
+                </button>
+              </div>
             )}
-            {isScanning ? "Analisando..." : "Analisar Silêncio"}
-          </Button>
-          <Button size="sm" onClick={handleImport}>
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
+          </div>
+          <Button size="sm" className="h-7 px-2 text-[11px]" onClick={handleImport}>
+            <Upload className="h-3 w-3 mr-1" />
             Importar
           </Button>
         </div>
@@ -593,12 +772,8 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
         </div>
       ) : (
         <div
+          ref={fileListContainerRef}
           className="flex-1 overflow-y-auto"
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-              setInsertBeforeIndex(null);
-            }
-          }}
         >
           {/* Column header */}
           <div className="flex items-center px-4 py-1.5 border-b bg-slate-50 text-xs text-slate-400 font-medium select-none sticky top-0 z-10">
@@ -630,20 +805,23 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
                 )}
 
                 <div
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, idx, file)}
-                  onDragOver={(e) => handleDragOver(e, idx)}
-                  onDragEnd={handleDragEnd}
-                  onDrop={(e) => handleDrop(e, idx)}
+                  data-file-index={idx}
                   onContextMenu={(e) => handleContextMenu(e, file.id)}
                   className={cn(
                     "flex items-center py-2.5 px-4 border-b border-slate-50 group transition-colors select-none",
                     isSelected ? "bg-blue-50" : "hover:bg-slate-50",
-                    isDraggingThis && "opacity-40"
+                    isDraggingThis && "bg-blue-50 ring-1 ring-blue-200 shadow-sm opacity-75"
                   )}
                 >
                   {/* Drag handle */}
-                  <div className="w-6 flex-shrink-0 flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
+                  <div
+                    onPointerDown={(e) => handlePointerDragStart(e, idx, file)}
+                    className={cn(
+                      "w-6 flex-shrink-0 flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500",
+                      isDraggingThis && "text-blue-500"
+                    )}
+                    title="Arraste para mover/reordenar"
+                  >
                     <GripVertical className="h-4 w-4" />
                   </div>
 
@@ -700,7 +878,7 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
                       <>
                         <div className="flex items-center gap-1.5 min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
-                          <SilenceBadge file={file} />
+                          <SilenceBadge file={file} compact={!showSilenceBadge} />
                         </div>
                         <p className="text-xs text-slate-400 truncate">{file.filename}</p>
                       </>
@@ -763,6 +941,19 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
             Renomear
           </button>
 
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => handleAnalyzeSingle(contextFile)}
+            disabled={scanningFolderId !== null}
+          >
+            {scanningFileId === contextFile.id ? (
+              <Loader2 className="h-3.5 w-3.5 text-slate-400 animate-spin" />
+            ) : (
+              <ScanLine className="h-3.5 w-3.5 text-slate-400" />
+            )}
+            Analisar silêncio
+          </button>
+
           {/* Mover para... inline sub-items */}
           <div className="relative group/move">
             <button
@@ -774,15 +965,15 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
                   movePicker?.fileId === contextFile.id
                     ? null
                     : (() => {
-                        const subMenuW = 168;
-                        const subMenuH = 120;
-                        const rightX = contextMenu.x + 164;
-                        const anchorX = rightX + subMenuW > window.innerWidth - 8
-                          ? contextMenu.x - subMenuW
-                          : rightX;
-                        const anchorY = Math.min(contextMenu.y + 30, window.innerHeight - subMenuH - 8);
-                        return { fileId: contextFile.id, anchorX, anchorY };
-                      })()
+                      const subMenuW = 168;
+                      const subMenuH = 120;
+                      const rightX = contextMenu.x + 164;
+                      const anchorX = rightX + subMenuW > window.innerWidth - 8
+                        ? contextMenu.x - subMenuW
+                        : rightX;
+                      const anchorY = Math.min(contextMenu.y + 30, window.innerHeight - subMenuH - 8);
+                      return { fileId: contextFile.id, anchorX, anchorY };
+                    })()
                 );
               }}
             >
@@ -832,6 +1023,19 @@ export function AudioFileList({ draggingFileId, setDraggingFileId, currentFolder
               </button>
             ))
           )}
+        </div>
+      )}
+
+      {/* ── Drag preview ───────────────────────────────────────────────────── */}
+      {dragPreview && (
+        <div
+          className="fixed z-[70] pointer-events-none"
+          style={{ left: dragPreview.x + 14, top: dragPreview.y + 12 }}
+        >
+          <div className="rounded-md border border-white/40 bg-white/85 text-white shadow-lg px-2.5 py-1.5 min-w-[180px] max-w-[260px]">
+            <p className="text-[10px] uppercase tracking-wider text-slate-400">Movendo arquivo</p>
+            <p className="text-xs font-medium truncate text-slate-600">{dragPreview.name}</p>
+          </div>
         </div>
       )}
     </div>

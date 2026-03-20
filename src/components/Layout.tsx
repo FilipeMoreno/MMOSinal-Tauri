@@ -197,21 +197,34 @@ export function Layout() {
             "py-3 border-t border-slate-100 flex items-center transition-all duration-200 w-full hover:bg-slate-50",
             collapsed ? "justify-center px-2" : "justify-between px-4",
           )}
-          title="Sobre o aplicativo"
+          title={
+            collapsed
+              ? `Sobre o aplicativo${version ? ` (v${version})` : ""}${hasUpdate && updateVersion ? ` — v${updateVersion} disponível` : ""}`
+              : "Sobre o aplicativo"
+          }
         >
-          {!collapsed && (
+          {collapsed ? (
             <span className={cn(
-              "text-xs",
-              hasUpdate ? "text-green-600 font-medium" : "text-slate-400",
+              "text-[10px] font-semibold leading-none",
+              hasUpdate ? "text-green-600" : "text-slate-500",
             )}>
-              {version ? `v${version}` : ""}
-              {hasUpdate && ` · v${updateVersion} disponível`}
+              {version ? `v${version}` : "v--"}
             </span>
+          ) : (
+            <>
+              <span className={cn(
+                "text-xs",
+                hasUpdate ? "text-green-600 font-medium" : "text-slate-400",
+              )}>
+                {version ? `v${version}` : ""}
+                {hasUpdate && ` · v${updateVersion} disponível`}
+              </span>
+              <div
+                className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", hasUpdate ? "bg-green-500 animate-pulse" : "bg-green-500")}
+                title={hasUpdate ? `v${updateVersion} disponível` : "Online"}
+              />
+            </>
           )}
-          <div
-            className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", hasUpdate ? "bg-green-500 animate-pulse" : "bg-green-500")}
-            title={hasUpdate ? `v${updateVersion} disponível` : "Online"}
-          />
         </button>
       </aside>
 

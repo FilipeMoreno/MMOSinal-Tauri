@@ -7,6 +7,32 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.3] - 2026-03-20
+
+### Adicionado
+- **Menu de contexto por arquivo na Biblioteca** — clique com botão direito em uma música agora inclui a ação **"Analisar silêncio"** para análise individual.
+- **Menu de contexto na sidebar de pastas** — clique com botão direito na lista de pastas agora abre ações rápidas:
+  - **Criar pasta**
+  - **Editar**
+  - **Excluir**
+- **Feedback visual de arraste** — adicionada prévia flutuante **"Movendo arquivo"** enquanto o usuário arrasta um item da lista.
+
+### Alterado
+- **Toolbar da Biblioteca** — controles do topo foram compactados para manter o mesmo porte visual de **"Em ordem/Aleatório"**.
+- **Ações de silêncio e badge** — opções foram consolidadas em um único dropdown **"Ações"** (substituindo múltiplos botões).
+- **Exibição da badge de silêncio** — ao ocultar texto, a badge continua visível em modo compacto (somente ícone), facilitando leitura da linha sem perder o status.
+- **Rótulo da ação de badge** — opção atualizada para **"Ocultar/Mostrar texto da badge"** para deixar o comportamento explícito.
+
+### Corrigido
+- **Drag-and-drop de arquivos na Biblioteca (Tauri/WebView)**:
+  - Corrigido o estado que exibia cursor de bloqueio ao iniciar arraste.
+  - Reordenação dentro da pasta voltou a funcionar de forma consistente.
+  - Movimento entre pastas voltou a permitir soltar no destino corretamente.
+- **Highlight de drop na sidebar** — durante arraste, apenas a pasta alvo é destacada (evita a lateral toda azul).
+- **Renomeação de pasta** — ao editar nome de pasta, a linha agora mostra corretamente botões **Salvar/Cancelar** (em vez dos botões padrão de edição/exclusão).
+
+---
+
 ## [1.3.2] - 2026-03-20
 
 ### Adicionado
