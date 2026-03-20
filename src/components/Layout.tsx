@@ -173,19 +173,14 @@ export function Layout() {
           <div className={cn("mx-2 mb-2 rounded-lg bg-blue-50 border border-blue-100 transition-all duration-200", collapsed ? "px-1 py-2" : "px-3 py-2.5")}>
             {collapsed ? (
               <div className="flex justify-center">
-                <span className="relative flex h-2 w-2 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+                <span className="relative flex h-4 w-4 flex-shrink-0">
+                  <Radio className="h-full w-full text-green-600 flex-shrink-0 animate-pulse" />
                 </span>
               </div>
             ) : (
               <>
                 <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2 flex-shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-                  </span>
-                  <Radio className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                  <Radio className="h-4 w-4 text-green-600 flex-shrink-0 animate-pulse" />
                   <span className="text-xs font-medium text-green-600">Tocando</span>
                 </div>
                 <p className="text-xs text-slate-700 mt-1 truncate">{playingLabel}</p>
