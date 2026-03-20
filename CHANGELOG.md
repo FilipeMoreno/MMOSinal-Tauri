@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.7] - 2026-03-20
+
+### Adicionado
+- **Dialog "O que há de novo"** — após uma atualização, ao abrir o app pela primeira vez na nova versão, é exibido automaticamente um dialog com as novidades da versão instalada. Grupos técnicos ficam ocultos. A detecção é feita via `last_seen_version` no localStorage.
+
+### Técnico
+- Parser do CHANGELOG e `GROUP_COLORS` extraídos para `src/lib/changelog.ts` (módulo compartilhado entre `About.tsx` e o novo `WhatsNewDialog.tsx`).
+
+---
+
 ## [1.3.6] - 2026-03-20
 
 ### Corrigido
