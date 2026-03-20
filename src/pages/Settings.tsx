@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { settingsService, backupService } from "@/services/backupService";
+import { VOLUME_CHANGED_EVENT } from "@/components/shared/VolumeControl";
 import { timesyncService } from "@/services/timesyncService";
 import { configService } from "@/services/configService";
 import { changeLogService } from "@/services/changeLogService";
@@ -101,6 +102,7 @@ export function Settings() {
     setup_complete: true,
     kiosk_mode: false,
     kiosk_start: false,
+    mini_player_enabled: true,
   });
   const [savedKiosk, setSavedKiosk] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -156,6 +158,16 @@ export function Settings() {
     return () => { mounted = false; };
   }, [fetchFolders]);
 
+  // Keep default_volume in sync when VolumeControl changes it live
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const val = (e as CustomEvent<number>).detail;
+      setSettings((s) => ({ ...s, default_volume: val }));
+    };
+    window.addEventListener(VOLUME_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(VOLUME_CHANGED_EVENT, handler);
+  }, []);
+
   const set = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
     setSettings((s) => ({ ...s, [key]: value }));
 
@@ -176,6 +188,7 @@ export function Settings() {
       }
       await invoke("set_kiosk_mode", { enabled: settings.kiosk_mode });
       setSavedKiosk(settings.kiosk_mode);
+      window.dispatchEvent(new CustomEvent("app:settings-saved", { detail: settings }));
       toast.success("Configurações salvas");
       changeLogService.log("saved", "settings");
     } catch (e) {
@@ -531,6 +544,13 @@ export function Settings() {
               description="O app inicia sem abrir a janela principal"
               checked={settings.start_minimized}
               onCheckedChange={(v) => set("start_minimized", v)}
+            />
+            <div className="h-px bg-slate-100" />
+            <ToggleRow
+              label="Mini player ao minimizar"
+              description="Exibe um card flutuante com o próximo sinal ou player ao minimizar a janela"
+              checked={settings.mini_player_enabled}
+              onCheckedChange={(v) => set("mini_player_enabled", v)}
             />
             <div className="h-px bg-slate-100" />
             <ToggleRow

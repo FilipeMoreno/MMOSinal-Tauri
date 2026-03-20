@@ -40,6 +40,9 @@ pub struct AppSettings {
     /// Ao iniciar, aplica automaticamente o modo quiosque
     #[serde(default)]
     pub kiosk_start: bool,
+    /// Exibe mini player flutuante ao minimizar a janela principal
+    #[serde(default = "default_true")]
+    pub mini_player_enabled: bool,
 }
 
 fn default_backup_interval() -> u32 { 24 }
@@ -59,6 +62,7 @@ impl Default for AppSettings {
             setup_complete: false,
             kiosk_mode: false,
             kiosk_start: false,
+            mini_player_enabled: true,
         }
     }
 }

@@ -183,6 +183,7 @@ export interface AppSettings {
   setup_complete: boolean;
   kiosk_mode: boolean;
   kiosk_start: boolean;
+  mini_player_enabled: boolean;
 }
 
 export interface ImportResult {

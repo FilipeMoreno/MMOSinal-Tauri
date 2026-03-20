@@ -271,7 +271,12 @@ impl PlayerEngine {
                     let triggered_by_content_end = content_end_done_pos.is_some();
 
                     // Only probe for device failure on natural EOF (not content_end stop).
-                    if !triggered_by_content_end {
+                    // Also skip the probe when this task has been superseded by a stop/skip:
+                    // play_id was incremented, so stream_handle_clone may already be stale
+                    // (the new play() replaced _stream), and trying Sink::try_new on it would
+                    // always fail and produce a spurious "device disconnected" toast.
+                    let superseded = play_id_clone.load(Ordering::SeqCst) != my_play_id;
+                    if !triggered_by_content_end && !superseded {
                         // Distinguish natural end-of-file from device failure:
                         // if we cannot create a new sink the output device is gone.
                         // Use spawn_blocking + timeout to avoid freezing the async task when
@@ -379,6 +384,12 @@ impl PlayerEngine {
                     break 'play_loop;
                 }
 
+                // Skip position update and timeout checks while paused
+                if cur_sink.is_paused() {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+
                 // Update position
                 let position_ms = cur_sink.get_pos().as_millis() as i64;
                 {
@@ -416,7 +427,8 @@ impl PlayerEngine {
                 // source queue still has data. Probe the stream handle directly.
                 // Use spawn_blocking + timeout so the check cannot freeze the
                 // async task if the Windows audio driver hangs after removal.
-                if tick % 10 == 0 {
+                // Skip entirely if superseded: stream_handle_clone is stale.
+                if tick % 10 == 0 && play_id_clone.load(Ordering::SeqCst) == my_play_id {
                     let sh = stream_handle_clone.clone();
                     let device_gone = tokio::time::timeout(
                         Duration::from_millis(500),
@@ -694,6 +706,38 @@ impl PlayerEngine {
         });
 
         Ok(())
+    }
+
+    /// Set playback volume (0.0–1.0).
+    pub async fn set_volume(&self, volume: f32, app: &AppHandle) {
+        let volume = volume.clamp(0.0, 1.0);
+        if let Some(sink) = self.sink.lock().await.clone() {
+            sink.set_volume(volume);
+        }
+        {
+            let mut st = self.state.lock().await;
+            st.volume = volume;
+        }
+        self.emit_state(app).await;
+    }
+
+    /// Pause if playing, resume if paused.
+    pub async fn pause_or_resume(&self, app: &AppHandle) {
+        let sink = self.sink.lock().await.clone();
+        let Some(sink) = sink else { return; };
+
+        let is_paused = sink.is_paused();
+        if is_paused {
+            sink.play();
+        } else {
+            sink.pause();
+        }
+
+        {
+            let mut st = self.state.lock().await;
+            st.status = if is_paused { PlayerStatus::Playing } else { PlayerStatus::Paused };
+        }
+        self.emit_state(app).await;
     }
 
     /// Seek to `position_ms` using the codec's native seek — instantaneous, no restart.

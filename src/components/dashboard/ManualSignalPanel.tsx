@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Play, Square, Zap, Volume2, Music, Folder, FolderOpen, Search,
-  Plus, X, GripVertical, ListMusic, RefreshCw,
+  Play, Square, Zap, Music, Folder, FolderOpen, Search,
+  Plus, X, ListMusic, RefreshCw, GripVertical, SkipBack, SkipForward, Pause,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +26,101 @@ import { useAudioStore } from "@/stores/audioStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useUiStore } from "@/stores/uiStore";
 import { playerService } from "@/services/playerService";
+import { VolumeControl } from "@/components/shared/VolumeControl";
 import { formatDuration } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { AudioFile } from "@/types";
+
+// ── Sortable queue item (shared by dialog and card) ───────────────────────────
+
+function SortableQueueItem({
+  file,
+  idx,
+  isActive,
+  onRemove,
+  onClick,
+  compact = false,
+  dark = false,
+}: {
+  file: AudioFile;
+  idx: number;
+  isActive?: boolean;
+  onRemove: () => void;
+  onClick?: () => void;
+  compact?: boolean;
+  dark?: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: file.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group flex items-center gap-1 rounded transition-colors",
+        compact ? "px-1.5 py-0.5" : "px-2 py-1",
+        dark
+          ? "text-blue-100 hover:bg-white/10"
+          : isActive
+            ? "bg-blue-100 text-blue-700"
+            : "hover:bg-slate-100 text-slate-700",
+      )}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className={cn(
+          "flex-shrink-0 cursor-grab active:cursor-grabbing touch-none",
+          dark ? "text-white/30 hover:text-white/70" : "text-slate-300 hover:text-slate-500",
+        )}
+        tabIndex={-1}
+      >
+        <GripVertical className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+      </button>
+      <span className={cn(
+        "font-mono flex-shrink-0 text-right",
+        compact ? "text-[10px] w-3" : "text-xs w-4",
+        dark ? "text-white/40" : "text-slate-400",
+      )}>
+        {idx + 1}
+      </span>
+      <button
+        onClick={onClick}
+        disabled={!onClick}
+        className={cn(
+          "truncate flex-1 min-w-0 text-left",
+          compact ? "text-[11px]" : "text-xs",
+          onClick ? "hover:opacity-80 cursor-pointer" : "cursor-default",
+        )}
+      >
+        {file.name}
+      </button>
+      {!compact && file.duration_ms && (
+        <span className={cn("text-[10px] font-mono flex-shrink-0", dark ? "text-white/40" : "text-slate-400")}>
+          {formatDuration(file.duration_ms)}
+        </span>
+      )}
+      <button
+        onClick={onRemove}
+        className={cn(
+          "flex-shrink-0 h-4 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity",
+          dark ? "text-white/50 hover:text-red-300" : "text-slate-300 hover:text-red-500",
+        )}
+        title="Remover"
+      >
+        <X className="h-2.5 w-2.5" />
+      </button>
+    </div>
+  );
+}
 
 // ── Picker Dialog ─────────────────────────────────────────────────────────────
 
@@ -54,9 +160,9 @@ function ManualSignalPickerDialog({
   const [newQueueMode, setNewQueueMode] = useState(false);
   const [loadingId, setLoadingId] = useState<number | null>(null);
 
-  // Shown queue depends on mode
-  const displayQueue = newQueueMode ? localQueue : runningQueueRemaining;
   const isAddMode = hasActiveQueue && !newQueueMode;
+  // isAddMode → show running remaining; otherwise → show local queue being built
+  const displayQueue = isAddMode ? runningQueueRemaining : localQueue;
 
   // Reset on each open
   useEffect(() => {
@@ -72,7 +178,8 @@ function ManualSignalPickerDialog({
     if (open && folders.length > 0 && activeFolderId === null) {
       const id = folders[0].id;
       setActiveFolderId(id);
-      if (!files[id]) fetchFiles(id);
+      // Fetch all folders so counts show immediately in the sidebar
+      folders.forEach((f) => { if (!files[f.id]) fetchFiles(f.id); });
     }
   }, [open, folders, activeFolderId, files, fetchFiles]);
 
@@ -121,16 +228,34 @@ function ManualSignalPickerDialog({
     });
   };
 
-  const handleQueueAction = async () => {
-    if (newQueueMode) {
-      if (localQueue.length === 0) return;
-      const snapshot = [...localQueue];
-      onClose();
-      await onPlayQueue(snapshot);
+  const removeQueueItem = (fileId: number) => {
+    if (isAddMode) {
+      onReplaceRemainingQueue(runningQueueRemaining.filter((f) => f.id !== fileId));
     } else {
-      // Replace remaining with local queue (from "new queue" that was staged)
-      onReplaceRemainingQueue(localQueue);
-      onClose();
+      handleRemoveLocal(fileId);
+    }
+  };
+
+  const handleQueueAction = async () => {
+    if (displayQueue.length === 0) return;
+    const snapshot = [...displayQueue];
+    onClose();
+    await onPlayQueue(snapshot);
+  };
+
+  const dialogSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDialogDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = displayQueue.findIndex((f) => f.id === active.id);
+    const newIdx = displayQueue.findIndex((f) => f.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(displayQueue, oldIdx, newIdx);
+    if (isAddMode) {
+      onReplaceRemainingQueue(reordered);
+    } else {
+      setLocalQueue(reordered);
     }
   };
 
@@ -148,13 +273,9 @@ function ManualSignalPickerDialog({
 
   const queueDuration = displayQueue.reduce((sum, f) => sum + (f.duration_ms ?? 0), 0);
 
-  const queueBarVisible = isAddMode
-    ? runningQueueRemaining.length > 0
-    : localQueue.length > 0;
-
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-5 pt-5 pb-0">
           <div className="flex items-start justify-between">
             <div>
@@ -188,9 +309,9 @@ function ManualSignalPickerDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex h-[390px] mt-4 border-t border-slate-100">
+        <div className="flex h-[420px] mt-4 border-t border-slate-100">
           {/* Folder sidebar */}
-          <div className="w-44 flex-shrink-0 border-r border-slate-100 bg-slate-50 overflow-y-auto py-1">
+          <div className="w-40 flex-shrink-0 border-r border-slate-100 bg-slate-50 overflow-y-auto py-1">
             {folders.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-8 px-3">Nenhuma pasta</p>
             ) : (
@@ -223,9 +344,9 @@ function ManualSignalPickerDialog({
           </div>
 
           {/* File list */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-3 py-2 border-b border-slate-100">
-              <div className="relative">
+          <div className="flex-1 flex flex-col overflow-hidden border-r border-slate-100">
+            <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-2">
+              <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input
                   value={search}
@@ -234,6 +355,42 @@ function ManualSignalPickerDialog({
                   className="pl-8 h-8 text-sm bg-slate-50 border-slate-200"
                 />
               </div>
+              {folderFiles.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (folderFiles.length === 0) return;
+                    if (isAddMode) {
+                      // Append folder files not already in running queue
+                      const existingIds = new Set(runningQueueRemaining.map((f) => f.id));
+                      folderFiles
+                        .filter((f) => !existingIds.has(f.id))
+                        .forEach((f) => onAppendToCurrentQueue(f));
+                    } else if (newQueueMode) {
+                      // Add all to local queue being built (deduplicated)
+                      setLocalQueue((prev) => {
+                        const ids = new Set(prev.map((f) => f.id));
+                        return [...prev, ...folderFiles.filter((f) => !ids.has(f.id))];
+                      });
+                    } else {
+                      // No active queue: play immediately
+                      const snapshot = [...folderFiles];
+                      onClose();
+                      await onPlayQueue(snapshot);
+                    }
+                  }}
+                  title={
+                    isAddMode
+                      ? "Adicionar pasta à fila atual"
+                      : newQueueMode
+                        ? "Adicionar pasta à nova fila"
+                        : "Tocar pasta inteira como fila"
+                  }
+                  className="flex-shrink-0 flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                >
+                  <Play className="h-3 w-3 fill-current" />
+                  {isAddMode ? "+ Pasta" : newQueueMode ? "+ Pasta" : "Tocar pasta"}
+                </button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -316,87 +473,71 @@ function ManualSignalPickerDialog({
               )}
             </div>
           </div>
-        </div>
 
-        {/* Queue bar */}
-        {queueBarVisible && (
-          <div className="border-t border-slate-100">
-            <div className="px-4 pt-3 pb-1 max-h-28 overflow-y-auto space-y-1">
-              {displayQueue.map((file, idx) => (
-                <div key={`${file.id}-${idx}`} className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-xs font-mono text-slate-400 w-4 text-right flex-shrink-0">
-                      {idx + 1}
-                    </span>
-                    {!isAddMode && (
-                      <GripVertical className="h-3 w-3 text-slate-300 flex-shrink-0" />
-                    )}
-                    <p className="text-xs text-slate-600 truncate">{file.name}</p>
-                    {file.duration_ms && (
-                      <span className="text-xs text-slate-400 font-mono flex-shrink-0">
-                        {formatDuration(file.duration_ms)}
-                      </span>
-                    )}
-                  </div>
-                  {!isAddMode && (
-                    <div className="flex items-center gap-0.5 flex-shrink-0">
-                      {idx > 0 && (
-                        <button
-                          onClick={() => moveLocalItem(idx, idx - 1)}
-                          className="h-4 w-4 text-slate-300 hover:text-slate-500 text-xs leading-none"
-                        >
-                          ↑
-                        </button>
-                      )}
-                      {idx < displayQueue.length - 1 && (
-                        <button
-                          onClick={() => moveLocalItem(idx, idx + 1)}
-                          className="h-4 w-4 text-slate-300 hover:text-slate-500 text-xs leading-none"
-                        >
-                          ↓
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleRemoveLocal(file.id)}
-                        className="h-4 w-4 text-slate-300 hover:text-red-400 ml-1"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-t border-slate-100">
-              <div className="flex items-center gap-2">
+          {/* Queue sidebar (right) */}
+          <div className="w-52 flex-shrink-0 flex flex-col bg-slate-50/40">
+            {/* Sidebar header */}
+            <div className="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-1.5">
                 <ListMusic className="h-3.5 w-3.5 text-slate-400" />
-                <span className="text-xs text-slate-500">
-                  {displayQueue.length} {displayQueue.length === 1 ? "música" : "músicas"}
-                  {queueDuration > 0 && (
-                    <span className="text-slate-400"> · {formatDuration(queueDuration)}</span>
-                  )}
+                <span className="text-xs font-semibold text-slate-600">
+                  {isAddMode ? "Fila ativa" : "Lista de reprodução"}
                 </span>
                 {isAddMode && (
-                  <span className="text-xs text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">
-                    fila ativa
+                  <span className="text-[10px] text-blue-500 bg-blue-50 rounded px-1.5 py-0.5 font-medium">
+                    ao vivo
                   </span>
                 )}
-                {!isAddMode && (
-                  <button
-                    onClick={() => setLocalQueue([])}
-                    className="text-xs text-slate-400 hover:text-red-500 underline underline-offset-2"
-                  >
-                    Limpar
-                  </button>
-                )}
+              </div>
+              {!isAddMode && displayQueue.length > 0 && (
+                <button
+                  onClick={() => setLocalQueue([])}
+                  className="text-[10px] text-slate-400 hover:text-red-500 transition-colors"
+                  title="Limpar lista"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+
+            {/* Queue items */}
+            <div className="flex-1 overflow-y-auto py-1">
+              {displayQueue.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-2 px-4 text-center">
+                  <ListMusic className="h-7 w-7" />
+                  <p className="text-xs text-slate-400">Lista vazia</p>
+                  <p className="text-[10px] text-slate-300">
+                    {isAddMode ? "Adicione arquivos à fila" : "Use + para adicionar músicas"}
+                  </p>
+                </div>
+              ) : (
+                <DndContext sensors={dialogSensors} collisionDetection={closestCenter} onDragEnd={handleDialogDragEnd}>
+                  <SortableContext items={displayQueue.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                    {displayQueue.map((file, idx) => (
+                      <SortableQueueItem
+                        key={file.id}
+                        file={file}
+                        idx={idx}
+                        onRemove={() => removeQueueItem(file.id)}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              )}
+            </div>
+
+            {/* Sidebar footer */}
+            <div className="border-t border-slate-100 px-3 py-2.5 flex-shrink-0 space-y-2">
+              <div className="text-[10px] text-slate-400">
+                {displayQueue.length} {displayQueue.length === 1 ? "música" : "músicas"}
+                {queueDuration > 0 && <span> · {formatDuration(queueDuration)}</span>}
               </div>
               {!isAddMode && (
                 <Button
                   size="sm"
-                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={handleQueueAction}
-                  disabled={localQueue.length === 0}
+                  disabled={displayQueue.length === 0}
                 >
                   <Play className="h-3 w-3 mr-1.5 fill-current" />
                   {newQueueMode ? "Iniciar nova fila" : "Tocar fila"}
@@ -404,7 +545,7 @@ function ManualSignalPickerDialog({
               )}
             </div>
           </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -524,6 +665,51 @@ export function ManualSignalPanel() {
     await playerService.playManual(queueRef.current[idx].id).catch(() => {});
   }, []);
 
+const handleRemoveFromQueue = useCallback((fileId: number) => {
+    const next = queueRef.current.filter((f) => f.id !== fileId);
+    queueRef.current = next;
+    if (next.length === 0) {
+      inQueueModeRef.current = false;
+      queueIdxRef.current = -1;
+      setDisplayQueue([]);
+      setQueueIdx(-1);
+    } else {
+      setDisplayQueue([...next]);
+    }
+  }, []);
+
+  const handlePause = async () => {
+    try { await playerService.pause(); }
+    catch (e) { toast.error(`Erro: ${e}`); }
+  };
+
+  const handleSkipInQueue = useCallback(async (dir: 1 | -1) => {
+    if (inQueueModeRef.current) {
+      const next = queueIdxRef.current + dir;
+      if (next >= 0 && next < queueRef.current.length) {
+        await handleJumpToQueueItem(next);
+      }
+    } else {
+      try { await playerService.skipTrack(dir); }
+      catch (e) { toast.error(`Erro: ${e}`); }
+    }
+  }, [handleJumpToQueueItem]);
+
+  const cardSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleCardDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const upcomingItems = queueRef.current.slice(queueIdxRef.current + 1);
+    const oldIdx = upcomingItems.findIndex((f) => f.id === active.id);
+    const newIdx = upcomingItems.findIndex((f) => f.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(upcomingItems, oldIdx, newIdx);
+    const next = [...queueRef.current.slice(0, queueIdxRef.current + 1), ...reordered];
+    queueRef.current = next;
+    setDisplayQueue([...next]);
+  }, []);
+
   const inQueueMode = displayQueue.length > 0 && queueIdx >= 0;
   const runningQueueRemaining = inQueueMode
     ? displayQueue.slice(queueIdx + 1)
@@ -620,10 +806,7 @@ export function ManualSignalPanel() {
               </div>
 
               <div className="flex items-center justify-between text-xs text-blue-100 font-medium pt-1">
-                <div className="flex items-center gap-1.5 bg-black/10 px-2 py-0.5 rounded backdrop-blur-sm border border-white/5">
-                  <Volume2 className="h-3.5 w-3.5" />
-                  <span>{Math.round(volume * 100)}%</span>
-                </div>
+                <VolumeControl volume={volume} dark />
                 <span className="font-mono tabular-nums bg-black/10 px-2 py-0.5 rounded backdrop-blur-sm border border-white/5">
                   {formatDuration(displayPos)}
                   {duration > 0 && ` / ${formatDuration(duration)}`}
@@ -635,27 +818,26 @@ export function ManualSignalPanel() {
           {/* Queue progress */}
           {inQueueMode && displayQueue.length > 1 && (
             <div className={cn(
-              "rounded-xl border px-3 py-2.5 space-y-1 shadow-inner",
+              "rounded-xl border px-3 py-2.5 shadow-inner",
               isManualPlaying ? "bg-black/10 border-white/10 backdrop-blur-md" : "bg-slate-50 border-slate-100"
             )}>
               <div className="flex items-center gap-1.5 mb-2">
                 <ListMusic className={cn("h-3.5 w-3.5", isManualPlaying ? "text-cyan-200" : "text-slate-400")} />
-                <span className={cn("text-xs font-semibold uppercase tracking-wider", isManualPlaying ? "text-cyan-100" : "text-slate-500")}>Fila de reprodução</span>
+                <span className={cn("text-xs font-semibold uppercase tracking-wider", isManualPlaying ? "text-cyan-100" : "text-slate-500")}>
+                  Fila de reprodução
+                </span>
               </div>
-              <div className="space-y-0.5 max-h-[120px] overflow-y-auto custom-scrollbar pr-1">
-                {displayQueue.map((f, i) => (
-                  <button
-                    key={f.id}
-                    onClick={() => i !== queueIdx && handleJumpToQueueItem(i)}
-                    disabled={i === queueIdx}
+              <div className="max-h-[120px] overflow-y-auto custom-scrollbar">
+                {/* Played/current items (not sortable) */}
+                {displayQueue.slice(0, queueIdx + 1).map((f, i) => (
+                  <div
+                    key={`played-${f.id}-${i}`}
                     className={cn(
-                      "w-full flex items-center gap-2 text-[11px] rounded px-2 py-1 text-left transition-colors font-medium border border-transparent",
-                      i === queueIdx && isManualPlaying && "bg-white/20 text-white border-white/20 cursor-default shadow-sm",
-                      i < queueIdx && isManualPlaying && "text-blue-200/50 line-through hover:bg-white/5 cursor-pointer",
-                      i > queueIdx && isManualPlaying && "text-blue-100 hover:bg-white/10 cursor-pointer",
-                      i === queueIdx && !isManualPlaying && "bg-blue-100 text-blue-700 cursor-default",
-                      i < queueIdx && !isManualPlaying && "text-slate-400 line-through hover:bg-slate-100 cursor-pointer",
-                      i > queueIdx && !isManualPlaying && "text-slate-600 hover:bg-blue-50 cursor-pointer",
+                      "flex items-center gap-1.5 text-[11px] rounded px-1.5 py-0.5 font-medium",
+                      i === queueIdx && isManualPlaying && "bg-white/20 text-white border border-white/20 shadow-sm",
+                      i === queueIdx && !isManualPlaying && "bg-blue-100 text-blue-700",
+                      i < queueIdx && isManualPlaying && "text-blue-200/40 line-through",
+                      i < queueIdx && !isManualPlaying && "text-slate-400 line-through",
                     )}
                   >
                     <span className="font-mono w-3 text-right flex-shrink-0 opacity-70">{i + 1}</span>
@@ -663,40 +845,99 @@ export function ManualSignalPanel() {
                       ? <Play className="h-2.5 w-2.5 flex-shrink-0 fill-current opacity-90" />
                       : <span className="w-2.5 flex-shrink-0" />
                     }
-                    <span className="truncate flex-1">{f.name}</span>
-                  </button>
+                    <button
+                      onClick={() => i !== queueIdx && handleJumpToQueueItem(i)}
+                      disabled={i === queueIdx}
+                      className="truncate flex-1 text-left disabled:cursor-default hover:opacity-80"
+                    >{f.name}</button>
+                  </div>
                 ))}
+                {/* Upcoming items (sortable via DnD) */}
+                {runningQueueRemaining.length > 0 && (
+                  <DndContext sensors={cardSensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd}>
+                    <SortableContext items={runningQueueRemaining.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                      {runningQueueRemaining.map((f, relIdx) => {
+                        const absIdx = queueIdx + 1 + relIdx;
+                        return (
+                          <SortableQueueItem
+                            key={f.id}
+                            file={f}
+                            idx={absIdx}
+                            compact
+                            dark={isManualPlaying}
+                            onClick={() => handleJumpToQueueItem(absIdx)}
+                            onRemove={() => handleRemoveFromQueue(f.id)}
+                          />
+                        );
+                      })}
+                    </SortableContext>
+                  </DndContext>
+                )}
               </div>
             </div>
           )}
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <Button
-              className={cn(
-                "flex-1 font-semibold shadow-sm transition-all",
-                isScheduledPlaying
-                  ? "bg-slate-100 hover:bg-slate-200 text-slate-400"
-                  : isManualPlaying 
-                    ? "bg-white text-blue-600 hover:bg-blue-50 border border-transparent"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
-              )}
-              onClick={() => setPickerOpen(true)}
-              disabled={isScheduledPlaying}
-              title={isScheduledPlaying ? "Aguarde o agendamento terminar" : undefined}
-            >
-              <Zap className="h-4 w-4 mr-2" />
-              {isManualPlaying ? "Trocar / Fila" : "Acionar Sinal"}
-            </Button>
-
-            {isManualPlaying && (
+            {isManualPlaying ? (
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSkipInQueue(-1)}
+                  className="bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/20 transition-all px-2.5 shadow-sm"
+                  title="Música anterior"
+                >
+                  <SkipBack className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handlePause}
+                  className="bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/20 transition-all px-2.5 shadow-sm"
+                  title={status === "paused" ? "Retomar" : "Pausar"}
+                >
+                  {status === "paused"
+                    ? <Play className="h-3.5 w-3.5 fill-current" />
+                    : <Pause className="h-3.5 w-3.5 fill-current" />
+                  }
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handleStop}
+                  className="bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/20 transition-all px-2.5 shadow-sm"
+                  title="Parar"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSkipInQueue(1)}
+                  className="bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/20 transition-all px-2.5 shadow-sm"
+                  title="Próxima música"
+                >
+                  <SkipForward className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  className="flex-1 bg-white text-blue-600 hover:bg-blue-50 border border-transparent font-semibold shadow-sm transition-all"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  Trocar / Fila
+                </Button>
+              </>
+            ) : (
               <Button
-                variant="ghost"
-                onClick={handleStop}
-                className="bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/20 transition-all px-3 shadow-sm"
-                title="Parar Reprodução"
+                className={cn(
+                  "flex-1 font-semibold shadow-sm transition-all",
+                  isScheduledPlaying
+                    ? "bg-slate-100 hover:bg-slate-200 text-slate-400"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                )}
+                onClick={() => setPickerOpen(true)}
+                disabled={isScheduledPlaying}
+                title={isScheduledPlaying ? "Aguarde o agendamento terminar" : undefined}
               >
-                <Square className="h-4 w-4 fill-current" />
+                <Zap className="h-4 w-4 mr-2" />
+                Acionar Sinal
               </Button>
             )}
           </div>

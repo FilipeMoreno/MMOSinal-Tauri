@@ -22,6 +22,7 @@ pub async fn get(pool: &SqlitePool) -> Result<AppSettings> {
             "setup_complete"       => s.setup_complete = row.value == "true",
             "kiosk_mode"           => s.kiosk_mode = row.value == "true",
             "kiosk_start"          => s.kiosk_start = row.value == "true",
+            "mini_player_enabled"  => s.mini_player_enabled = row.value != "false",
             _ => {}
         }
     }
@@ -42,6 +43,7 @@ pub async fn save(pool: &SqlitePool, s: &AppSettings) -> Result<()> {
         ("setup_complete",        s.setup_complete.to_string()),
         ("kiosk_mode",            s.kiosk_mode.to_string()),
         ("kiosk_start",           s.kiosk_start.to_string()),
+        ("mini_player_enabled",   s.mini_player_enabled.to_string()),
     ];
 
     for (key, value) in pairs {

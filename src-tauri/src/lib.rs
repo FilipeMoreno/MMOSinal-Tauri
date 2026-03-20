@@ -252,7 +252,11 @@ pub fn run() {
             commands::player::get_player_state,
             commands::player::stop_player,
             commands::player::play_manual,
+            commands::player::set_volume,
+            commands::player::save_default_volume,
+            commands::player::pause_player,
             commands::player::seek_player,
+            commands::player::skip_track,
             // Panic
             commands::panic::list_panic_buttons,
             commands::panic::create_panic_button,
@@ -287,6 +291,10 @@ pub fn run() {
             commands::seasonal::update_seasonal_override,
             commands::seasonal::delete_seasonal_override,
             commands::seasonal::toggle_seasonal_override,
+            // Mini window
+            commands::window::show_mini_window,
+            commands::window::hide_mini_window,
+            commands::window::restore_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

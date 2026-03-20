@@ -9,3 +9,4 @@ pub mod settings;
 pub mod panic;
 pub mod timesync;
 pub mod seasonal;
+pub mod window;

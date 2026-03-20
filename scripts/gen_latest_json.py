@@ -71,8 +71,8 @@ def main():
     with open("latest.json", "w", encoding="utf-8") as f:
         f.write(output)
 
-    print("--- latest.json gerado ---")
-    print(output)
+    sys.stdout.buffer.write(b"--- latest.json gerado ---\n")
+    sys.stdout.buffer.write(output.encode("utf-8"))
 
 
 if __name__ == "__main__":

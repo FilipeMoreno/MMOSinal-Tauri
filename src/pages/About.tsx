@@ -187,6 +187,7 @@ export function About() {
 
   // Changelog state
   const [activeVersion, setActiveVersion] = useState<string | null>(null);
+  const [showTechnical, setShowTechnical] = useState(false);
   const expanded = activeVersion ?? CHANGELOG[0]?.version ?? null;
 
   // System state
@@ -244,7 +245,7 @@ export function About() {
   const osName = platform.includes("Win") ? "Windows" : platform.includes("Mac") ? "macOS" : platform.includes("Linux") ? "Linux" : platform;
 
   return (
-    <div className="p-6 w-full max-w-5xl mx-auto space-y-5">
+    <div className="p-6 w-full space-y-5">
       {updateDialog}
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
@@ -506,6 +507,28 @@ export function About() {
       {/* ── Tab: Changelog ────────────────────────────────────────────────── */}
       {tab === "changelog" && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
+            <span className="text-xs text-slate-500">Mostrar técnico</span>
+            <button
+              role="switch"
+              aria-checked={showTechnical}
+              onClick={() => setShowTechnical((v) => !v)}
+              className={cn(
+                "relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
+                showTechnical ? "bg-blue-600" : "bg-slate-200",
+              )}
+              style={{ height: 18, width: 32 }}
+            >
+              <span
+                className={cn(
+                  "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
+                  showTechnical ? "translate-x-3.5" : "translate-x-0",
+                )}
+                style={{ height: 14, width: 14, marginTop: 0 }}
+              />
+            </button>
+          </div>
           <div className="flex h-[520px]">
             <div className="w-36 flex-shrink-0 border-r border-slate-100 bg-slate-50 overflow-y-auto py-1">
               {CHANGELOG.map((section) => {
@@ -521,32 +544,37 @@ export function About() {
               })}
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-              {CHANGELOG.filter((s) => s.version === expanded).map((section) => (
-                <div key={section.version}>
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <h3 className="text-sm font-bold text-slate-800">v{section.version}</h3>
-                    <span className="text-xs text-slate-400">{section.date}</span>
+              {CHANGELOG.filter((s) => s.version === expanded).map((section) => {
+                const visibleGroups = section.groups.filter((g) =>
+                  showTechnical || !g.label.toLowerCase().startsWith("técnico")
+                );
+                return (
+                  <div key={section.version}>
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <h3 className="text-sm font-bold text-slate-800">v{section.version}</h3>
+                      <span className="text-xs text-slate-400">{section.date}</span>
+                    </div>
+                    {visibleGroups.length === 0 ? (
+                      <p className="text-xs text-slate-400">Sem notas de versão.</p>
+                    ) : visibleGroups.map((group) => {
+                      const colorClass = GROUP_COLORS[group.label] ?? "text-slate-700 bg-slate-50 border-slate-200";
+                      return (
+                        <div key={group.label} className="mb-3">
+                          <span className={cn("inline-block text-xs font-semibold px-2 py-0.5 rounded border mb-2", colorClass)}>{group.label}</span>
+                          <ul className="space-y-1">
+                            {group.items.map((item, i) => (
+                              <li key={i} className="flex gap-2 text-xs text-slate-600">
+                                <span className="text-slate-300 flex-shrink-0 mt-0.5">–</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
                   </div>
-                  {section.groups.length === 0 ? (
-                    <p className="text-xs text-slate-400">Sem notas de versão.</p>
-                  ) : section.groups.map((group) => {
-                    const colorClass = GROUP_COLORS[group.label] ?? "text-slate-700 bg-slate-50 border-slate-200";
-                    return (
-                      <div key={group.label} className="mb-3">
-                        <span className={cn("inline-block text-xs font-semibold px-2 py-0.5 rounded border mb-2", colorClass)}>{group.label}</span>
-                        <ul className="space-y-1">
-                          {group.items.map((item, i) => (
-                            <li key={i} className="flex gap-2 text-xs text-slate-600">
-                              <span className="text-slate-300 flex-shrink-0 mt-0.5">–</span>
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

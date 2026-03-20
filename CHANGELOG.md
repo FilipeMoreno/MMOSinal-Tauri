@@ -7,6 +7,41 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.4] - 2026-03-20
+
+### Corrigido
+- **CI: erro de encoding ao gerar `latest.json`** — caracteres Unicode fora do cp1252 (ex: `≈`) no CHANGELOG causavam `UnicodeEncodeError` no `print()` do script Python no Windows. Corrigido escrevendo diretamente em `sys.stdout.buffer` com UTF-8.
+
+### Adicionado
+- **Controle de volume interativo** — ao clicar no indicador de volume em qualquer player (card principal, card de Sinal Manual, mini player), um popover com slider vertical é exibido, permitindo ajuste em tempo real. Inclui botão de mudo/desmudo e label com percentual.
+- **Controles de transporte no card de Sinal Manual** — adicionados botões ⏮ (anterior), ⏯ (pausar/retomar), ⏭ (próximo) e ⏹ (parar) durante reprodução manual.
+- **Drag-and-drop na fila de reprodução** — reordenação por arraste disponível tanto no diálogo de acionamento de sinal quanto na fila do card de Sinal Manual.
+- **Sidebar de fila no diálogo de sinal manual** — a lista de reprodução foi movida para uma sidebar lateral direita (em vez de ficar na barra inferior do diálogo), com largura fixa e suporte a DnD.
+- **Pause/retomar player** — novo comando `pause_player` no backend (Rust) utilizando `Sink::pause()` / `Sink::play()` do Rodio; estado `Paused` já existia no `audio_state.rs`.
+
+### Alterado
+- **Diálogo de sinal manual** ampliado para `max-w-3xl` para acomodar a sidebar de fila.
+- **Ícones de mover/excluir na fila do card** agora aparecem apenas no hover, reduzindo poluição visual.
+- **Botão "+ Pasta"** no modo de adição à fila ativa agora deduplicar itens já presentes antes de anexar.
+- **Contagem de arquivos por pasta** carregada ao abrir o diálogo (e não somente ao clicar na pasta).
+- **Volume padrão nas Configurações** atualizado em tempo real quando o controle de volume é ajustado em qualquer player (via evento `app:default-volume-changed`).
+
+### Corrigido
+- **Botão "Tocar fila"** não iniciava reprodução ao montar uma nova fila — chamava `onReplaceRemainingQueue` em vez de `onPlayQueue`.
+- **Fila do card de Sinal Manual** não exibia as músicas selecionadas no diálogo (`displayQueue` apontava para a fila errada no modo de nova fila).
+- **Mini player aparecia mesmo com a opção desativada nas Configurações** — o `setTimeout` de 150 ms do handler de blur podia disparar após a limpeza do `useEffect`. Corrigido com `useRef` para o estado atual da flag e cancelamento do timer tanto no cleanup quanto no handler de focus.
+- **Mini player duplicava (duas janelas)** — race condition TOCTOU: duas chamadas concorrentes de `show_mini_window` passavam pela verificação `get_webview_window("mini")` antes de qualquer uma criar a janela. Corrigido com `static MINI_CREATION_LOCK: Mutex<()>` e `try_lock()` com double-checked locking no Rust.
+- **Clique em item da fila para pular** parou de funcionar após adição do DnD — handler `onClick` re-adicionado ao elemento de nome separado do grip de arraste.
+
+### Técnico (Rust)
+- Novo método `PlayerEngine::set_volume()` atualiza o `Sink` e emite `player-state-changed`.
+- Novo método `PlayerEngine::pause_or_resume()` alterna entre `Playing` e `Paused`.
+- Loop principal do player ignora ticks de posição enquanto o sink estiver pausado.
+- `static MINI_CREATION_LOCK: Mutex<()>` em `commands/window.rs` previne criação duplicada do mini player.
+- Novos comandos Tauri registrados: `set_volume`, `save_default_volume`, `pause_player`.
+
+---
+
 ## [1.3.3] - 2026-03-20
 
 ### Adicionado

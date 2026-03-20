@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Music2, Square, Volume2, Radio } from "lucide-react";
+import { Music2, Square, Radio, SkipBack, SkipForward } from "lucide-react";
+import { VolumeControl } from "@/components/shared/VolumeControl";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePlayerStore } from "@/stores/playerStore";
@@ -12,6 +13,7 @@ const STATUS_LABEL: Record<string, string> = {
   fading_in: "Iniciando",
   fading_out: "Encerrando",
   paused: "Pausado",
+  idle: "Parado",
 };
 
 export function PlayerStatusCard() {
@@ -26,6 +28,11 @@ export function PlayerStatusCard() {
   const handleStop = async () => {
     try { await playerService.stop(); }
     catch (e) { toast.error(`Erro ao parar: ${e}`); }
+  };
+
+  const handleSkip = async (dir: 1 | -1) => {
+    try { await playerService.skipTrack(dir); }
+    catch (e) { toast.error(`Erro ao trocar música: ${e}`); }
   };
 
   const handleSeek = async (ms: number) => {
@@ -95,26 +102,31 @@ export function PlayerStatusCard() {
               if (duration === 0) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const p = (e.clientX - rect.left) / rect.width;
-              handleSeek(p * duration);
+              handleSeek(Math.round(p * duration));
             }}>
             <div className="absolute top-0 left-0 h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] rounded-full transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
           <div className="flex items-center justify-between text-xs text-emerald-100 font-medium">
-            <div className="flex items-center gap-1.5 bg-white/10 px-2 py-0.5 rounded-md backdrop-blur-sm drop-shadow-sm">
-              <Volume2 className="h-3.5 w-3.5" />
-              <span>{Math.round(volume * 100)}%</span>
-            </div>
+            <VolumeControl volume={volume} dark />
             <span className="font-mono tabular-nums bg-white/10 px-2 py-0.5 rounded-md backdrop-blur-sm drop-shadow-sm">
               {formatDuration(displayPos)}{duration > 0 && ` / ${formatDuration(duration)}`}
             </span>
           </div>
         </div>
 
-        {/* Stop */}
-        <Button variant="ghost" size="sm" className="mt-4 w-full text-white bg-white/10 hover:bg-white/20 hover:text-white border border-white/20 backdrop-blur-md shadow-sm transition-all" onClick={handleStop}>
-          <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-          Parar Reprodução
-        </Button>
+        {/* Controls */}
+        <div className="mt-4 flex gap-2">
+          <Button variant="ghost" size="sm" className="text-white bg-white/10 hover:bg-white/20 hover:text-white border border-white/20 backdrop-blur-md shadow-sm transition-all px-3" onClick={() => handleSkip(-1)} title="Música anterior">
+            <SkipBack className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="sm" className="flex-1 text-white bg-white/10 hover:bg-white/20 hover:text-white border border-white/20 backdrop-blur-md shadow-sm transition-all" onClick={handleStop}>
+            <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+            Parar
+          </Button>
+          <Button variant="ghost" size="sm" className="text-white bg-white/10 hover:bg-white/20 hover:text-white border border-white/20 backdrop-blur-md shadow-sm transition-all px-3" onClick={() => handleSkip(1)} title="Próxima música">
+            <SkipForward className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
