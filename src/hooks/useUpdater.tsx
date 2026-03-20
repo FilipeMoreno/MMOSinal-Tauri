@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Rocket, Sparkles, Download } from "lucide-react";
 
 /** Renders a subset of markdown: ###/##/# headers, - bullets, **bold**, `code` */
 function MarkdownText({ text }: { text: string }) {
@@ -137,25 +138,60 @@ export function useUpdater() {
 
   const dialog = updateInfo && dialogOpen ? (
     <Dialog open onOpenChange={(o) => !o && !installing && setDialogOpen(false)}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Atualização disponível — v{updateInfo.version}</DialogTitle>
-        </DialogHeader>
-        {updateInfo.body && (
-          <DialogDescription asChild>
-            <div className="max-h-64 overflow-y-auto pr-1 mt-1">
-              <MarkdownText text={updateInfo.body} />
+      <DialogContent className="max-w-md p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
+        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-6 text-white relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/4" />
+          
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="bg-white/20 p-3 rounded-xl backdrop-blur-md border border-white/25 shadow-inner">
+              <Rocket className="h-6 w-6 text-white" />
             </div>
-          </DialogDescription>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={installing}>
-            Agora não
-          </Button>
-          <Button onClick={handleInstall} disabled={installing}>
-            {installing ? "Instalando..." : "Instalar e reiniciar"}
-          </Button>
-        </DialogFooter>
+            <div>
+              <DialogTitle className="text-xl font-bold tracking-tight text-white mb-0.5 border-none">Nova Atualização!</DialogTitle>
+              <p className="text-blue-100 text-sm font-medium flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" />
+                Versão {updateInfo.version} disponível
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 bg-white flex flex-col gap-4">
+          {updateInfo.body && (
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">O que há de novo:</span>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 max-h-56 overflow-y-auto custom-scrollbar shadow-inner text-sm">
+                <MarkdownText text={updateInfo.body} />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="mt-2 sm:justify-between flex-row-reverse w-full gap-2">
+            <Button 
+              onClick={handleInstall} 
+              disabled={installing}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md hover:shadow-lg transition-all gap-2 flex-grow sm:flex-grow-0"
+            >
+              {installing ? (
+                <>
+                  <Download className="h-4 w-4 animate-bounce" /> Instalando...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" /> Instalar e reiniciar
+                </>
+              )}
+            </Button>
+            <Button 
+              variant="ghost" 
+              className="text-slate-500 hover:text-slate-700 hover:bg-slate-100 font-medium"
+              onClick={() => setDialogOpen(false)} 
+              disabled={installing}
+            >
+              Lembrar depois
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   ) : null;

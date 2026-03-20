@@ -543,37 +543,54 @@ export function ManualSignalPanel() {
       />
 
       <Card className={cn(
-        isManualPlaying && "border-l-4 border-l-blue-500 shadow-sm",
-        isScheduledPlaying && "border-l-4 border-l-indigo-300",
+        "transition-all duration-300 relative overflow-hidden border",
+        isManualPlaying 
+          ? "bg-gradient-to-br from-cyan-500 via-blue-500 to-blue-600 border-cyan-400/50 shadow-lg shadow-blue-500/20 text-white hover:shadow-xl hover:-translate-y-1"
+          : isScheduledPlaying 
+            ? "border-dashed border-2 border-indigo-200 bg-slate-50 opacity-90" 
+            : "border-slate-200 bg-white shadow-sm"
       )}>
-        <CardContent className="p-5 space-y-4">
+        {isManualPlaying && (
+          <>
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-white opacity-10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl pointer-events-none" />
+          </>
+        )}
+
+        <CardContent className="p-5 space-y-4 relative z-10">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {isManualPlaying && (
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                  <span className="animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite] absolute inline-flex h-full w-full rounded-full bg-cyan-200 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
                 </span>
               )}
-              <Zap className={cn("h-4 w-4", isManualPlaying ? "text-blue-500" : "text-slate-400")} />
-              <span className="text-xs text-slate-500 uppercase tracking-widest font-medium">
+              <Zap className={cn("h-4 w-4", isManualPlaying ? "text-cyan-100" : "text-slate-400")} />
+              <span className={cn(
+                "text-xs uppercase tracking-widest font-medium",
+                isManualPlaying ? "text-cyan-100 font-bold" : "text-slate-500"
+              )}>
                 Sinal Manual
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               {inQueueMode && (
-                <span className="text-xs text-blue-600 bg-blue-50 rounded-full px-2 py-0.5 font-mono">
+                <span className={cn(
+                  "text-[10px] rounded-full px-2 py-0.5 font-bold uppercase tracking-wider shadow-sm",
+                  isManualPlaying ? "bg-white/20 text-white backdrop-blur-md border border-white/20" : "text-blue-600 bg-blue-50"
+                )}>
                   Fila {queueIdx + 1}/{displayQueue.length}
                 </span>
               )}
               {isManualPlaying && !inQueueMode && (
-                <span className="text-xs font-semibold text-blue-700 bg-blue-100 rounded-full px-2.5 py-0.5">
+                <span className="text-[10px] font-bold text-blue-700 bg-white rounded-full px-2.5 py-0.5 shadow-sm uppercase tracking-wider">
                   Tocando
                 </span>
               )}
               {isScheduledPlaying && (
-                <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-full px-2.5 py-0.5">
+                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 rounded-full px-2.5 py-0.5 uppercase tracking-wider">
                   Agendamento ativo
                 </span>
               )}
@@ -582,46 +599,32 @@ export function ManualSignalPanel() {
 
           {/* Now playing */}
           {isManualPlaying && current_file && (
-            <div className={cn(
-              "rounded-lg border p-3 space-y-2.5",
-              isManualPlaying ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-100",
-            )}>
-              <div className="flex items-center gap-2 min-w-0">
-                <Music className={cn("h-3.5 w-3.5 flex-shrink-0", isManualPlaying ? "text-blue-400" : "text-slate-400")} />
-                <p className={cn(
-                  "font-semibold text-sm truncate flex-1",
-                  isManualPlaying ? "text-blue-900" : "text-slate-700",
-                )}>
+            <div className="rounded-xl border p-3.5 space-y-3 bg-white/10 border-white/20 backdrop-blur-md shadow-inner">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <Music className="h-4 w-4 text-white drop-shadow-sm" />
+                </div>
+                <p className="font-bold text-sm truncate flex-1 text-white drop-shadow-sm leading-tight">
                   {current_file.name}
                 </p>
               </div>
 
-              <input
-                type="range"
-                min={0}
-                max={duration > 0 ? duration : 100}
-                value={displayPos}
-                onChange={(e) => setDragValue(Number(e.target.value))}
-                onMouseUp={(e) => { handleSeek(Number((e.target as HTMLInputElement).value)); setDragValue(null); }}
-                onTouchEnd={(e) => { handleSeek(Number((e.target as HTMLInputElement).value)); setDragValue(null); }}
-                disabled={duration === 0 || isScheduledPlaying}
-                className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer disabled:cursor-default
-                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5
-                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:cursor-pointer
-                  [&::-webkit-slider-thumb]:shadow
-                  [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full
-                  [&::-moz-range-thumb]:bg-blue-500 [&::-moz-range-thumb]:border-0"
-                style={{
-                  background: `linear-gradient(to right, #3b82f6 ${pct}%, ${isManualPlaying ? "#dbeafe" : "#e2e8f0"} ${pct}%)`,
-                }}
-              />
+              <div className="relative h-1.5 w-full bg-black/20 rounded-full overflow-hidden cursor-pointer"
+                onClick={(e) => {
+                  if (duration === 0) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const p = (e.clientX - rect.left) / rect.width;
+                  handleSeek(p * duration);
+                }}>
+                <div className="absolute top-0 left-0 h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] rounded-full transition-all duration-200" style={{ width: `${pct}%` }} />
+              </div>
 
-              <div className="flex items-center justify-between text-xs text-blue-600">
-                <div className="flex items-center gap-1">
-                  <Volume2 className="h-3 w-3" />
+              <div className="flex items-center justify-between text-xs text-blue-100 font-medium pt-1">
+                <div className="flex items-center gap-1.5 bg-black/10 px-2 py-0.5 rounded backdrop-blur-sm border border-white/5">
+                  <Volume2 className="h-3.5 w-3.5" />
                   <span>{Math.round(volume * 100)}%</span>
                 </div>
-                <span className="font-mono tabular-nums">
+                <span className="font-mono tabular-nums bg-black/10 px-2 py-0.5 rounded backdrop-blur-sm border border-white/5">
                   {formatDuration(displayPos)}
                   {duration > 0 && ` / ${formatDuration(duration)}`}
                 </span>
@@ -631,42 +634,52 @@ export function ManualSignalPanel() {
 
           {/* Queue progress */}
           {inQueueMode && displayQueue.length > 1 && (
-            <div className="rounded-md bg-slate-50 border border-slate-100 px-3 py-2 space-y-0.5">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <ListMusic className="h-3 w-3 text-slate-400" />
-                <span className="text-xs text-slate-500 font-medium">Fila de reprodução</span>
+            <div className={cn(
+              "rounded-xl border px-3 py-2.5 space-y-1 shadow-inner",
+              isManualPlaying ? "bg-black/10 border-white/10 backdrop-blur-md" : "bg-slate-50 border-slate-100"
+            )}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <ListMusic className={cn("h-3.5 w-3.5", isManualPlaying ? "text-cyan-200" : "text-slate-400")} />
+                <span className={cn("text-xs font-semibold uppercase tracking-wider", isManualPlaying ? "text-cyan-100" : "text-slate-500")}>Fila de reprodução</span>
               </div>
-              {displayQueue.map((f, i) => (
-                <button
-                  key={f.id}
-                  onClick={() => i !== queueIdx && handleJumpToQueueItem(i)}
-                  disabled={i === queueIdx}
-                  className={cn(
-                    "w-full flex items-center gap-2 text-xs rounded px-1.5 py-0.5 text-left transition-colors",
-                    i === queueIdx && "bg-blue-100 text-blue-700 font-medium cursor-default",
-                    i < queueIdx && "text-slate-300 line-through hover:bg-slate-100 hover:text-slate-500 cursor-pointer",
-                    i > queueIdx && "text-slate-500 hover:bg-blue-50 hover:text-blue-600 cursor-pointer",
-                  )}
-                >
-                  <span className="font-mono w-3 text-right flex-shrink-0">{i + 1}</span>
-                  {i === queueIdx
-                    ? <Play className="h-2.5 w-2.5 flex-shrink-0 fill-current text-blue-500" />
-                    : <span className="w-2.5 flex-shrink-0" />
-                  }
-                  <span className="truncate flex-1">{f.name}</span>
-                </button>
-              ))}
+              <div className="space-y-0.5 max-h-[120px] overflow-y-auto custom-scrollbar pr-1">
+                {displayQueue.map((f, i) => (
+                  <button
+                    key={f.id}
+                    onClick={() => i !== queueIdx && handleJumpToQueueItem(i)}
+                    disabled={i === queueIdx}
+                    className={cn(
+                      "w-full flex items-center gap-2 text-[11px] rounded px-2 py-1 text-left transition-colors font-medium border border-transparent",
+                      i === queueIdx && isManualPlaying && "bg-white/20 text-white border-white/20 cursor-default shadow-sm",
+                      i < queueIdx && isManualPlaying && "text-blue-200/50 line-through hover:bg-white/5 cursor-pointer",
+                      i > queueIdx && isManualPlaying && "text-blue-100 hover:bg-white/10 cursor-pointer",
+                      i === queueIdx && !isManualPlaying && "bg-blue-100 text-blue-700 cursor-default",
+                      i < queueIdx && !isManualPlaying && "text-slate-400 line-through hover:bg-slate-100 cursor-pointer",
+                      i > queueIdx && !isManualPlaying && "text-slate-600 hover:bg-blue-50 cursor-pointer",
+                    )}
+                  >
+                    <span className="font-mono w-3 text-right flex-shrink-0 opacity-70">{i + 1}</span>
+                    {i === queueIdx
+                      ? <Play className="h-2.5 w-2.5 flex-shrink-0 fill-current opacity-90" />
+                      : <span className="w-2.5 flex-shrink-0" />
+                    }
+                    <span className="truncate flex-1">{f.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-1">
             <Button
               className={cn(
-                "flex-1",
+                "flex-1 font-semibold shadow-sm transition-all",
                 isScheduledPlaying
-                  ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                  : "bg-blue-600 hover:bg-blue-700 text-white",
+                  ? "bg-slate-100 hover:bg-slate-200 text-slate-400"
+                  : isManualPlaying 
+                    ? "bg-white text-blue-600 hover:bg-blue-50 border border-transparent"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
               )}
               onClick={() => setPickerOpen(true)}
               disabled={isScheduledPlaying}
@@ -678,10 +691,10 @@ export function ManualSignalPanel() {
 
             {isManualPlaying && (
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={handleStop}
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 px-3"
-                title="Parar"
+                className="bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/20 transition-all px-3 shadow-sm"
+                title="Parar Reprodução"
               >
                 <Square className="h-4 w-4 fill-current" />
               </Button>

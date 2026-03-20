@@ -44,25 +44,25 @@ function NavItem({
       title={collapsed ? (badge ? `${label} — atualização disponível` : label) : undefined}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+          "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300",
           collapsed && "justify-center px-0",
           isActive
-            ? "bg-blue-600 text-white shadow-sm"
-            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            ? "bg-gradient-to-r from-indigo-500 to-blue-600 text-white shadow-md shadow-indigo-500/20 translate-x-1"
+            : "text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:translate-x-1"
         )
       }
     >
       {({ isActive }) => (
         <>
           <span className="relative flex-shrink-0">
-            <Icon className={cn("h-4 w-4", isActive ? "text-white" : "text-slate-400")} />
+            <Icon className={cn("h-[18px] w-[18px] transition-colors", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-500")} />
             {badge && (
               <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-green-500 ring-1 ring-white animate-pulse" />
             )}
           </span>
           {!collapsed && <span className="flex-1">{label}</span>}
           {!collapsed && badge && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 leading-none">
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 leading-none shadow-sm">
               novo
             </span>
           )}
@@ -114,33 +114,36 @@ export function Layout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "flex-shrink-0 bg-white border-r border-slate-200 flex flex-col transition-all duration-200",
-          collapsed ? "w-14" : "w-56"
+          "flex-shrink-0 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 z-20 shadow-sm",
+          collapsed ? "w-[72px]" : "w-64"
         )}
       >
 
         {/* Brand */}
-        <div className={cn("py-5 border-b border-slate-100 transition-all duration-200", collapsed ? "px-2" : "px-4")}>
-          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <img src="/icon.png" alt="MMO Sinal" className="h-9 w-9 flex-shrink-0" />
+        <div className={cn("py-6 border-b border-slate-100 transition-all duration-300", collapsed ? "px-2" : "px-6")}>
+          <div className={cn("flex items-center gap-3 group cursor-default", collapsed && "justify-center")}>
+            <div className="relative">
+              <div className="absolute inset-0 bg-indigo-500 opacity-20 blur group-hover:opacity-40 transition-opacity rounded-full"></div>
+              <img src="/icon.png" alt="MMO Sinal" className="h-[38px] w-[38px] flex-shrink-0 relative z-10 drop-shadow-sm" />
+            </div>
             {!collapsed && (
               <div className="min-w-0">
-                <div className="font-bold text-sm text-slate-800 leading-tight">MMO Sinal</div>
-                <div className="text-xs text-slate-400 truncate">Gerenciador de Sinal Escolar</div>
+                <div className="font-extrabold text-[15px] tracking-tight text-slate-900 leading-none">MMO Sinal</div>
+                <div className="text-[11px] font-bold text-slate-400 truncate tracking-widest mt-1.5 uppercase">Sistema de Sinal Escolar</div>
               </div>
             )}
           </div>
         </div>
 
         {/* Nav */}
-        <nav className={cn("flex-1 py-3 space-y-0.5 overflow-y-auto transition-all duration-200", collapsed ? "px-1" : "px-2")}>
+        <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto custom-scrollbar transition-all duration-300", collapsed ? "px-2" : "px-4")}>
           {NAV_PRIMARY.map((item) => (
             <NavItem key={item.to} {...item} collapsed={collapsed} />
           ))}
 
           {!collapsed && (
             <div className="pt-4 pb-1 px-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Sistema</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sistema</span>
             </div>
           )}
           {collapsed && <div className="pt-4 pb-1" />}
@@ -158,7 +161,7 @@ export function Layout() {
         {/* Collapse toggle button */}
         <button
           onClick={toggleCollapsed}
-          className="w-full flex justify-center py-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+          className="w-full flex justify-center py-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
           title={collapsed ? "Expandir menu" : "Recolher menu"}
         >
           {collapsed ? (
@@ -170,22 +173,28 @@ export function Layout() {
 
         {/* Mini player */}
         {isPlaying && (
-          <div className={cn("mx-2 mb-2 rounded-lg bg-blue-50 border border-blue-100 transition-all duration-200", collapsed ? "px-1 py-2" : "px-3 py-2.5")}>
+          <div className={cn("mx-3 mb-3 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20 transition-all duration-300 relative overflow-hidden", collapsed ? "px-1.5 py-2.5" : "px-4 py-3")}>
+            <div className="absolute -top-10 -right-10 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl pointer-events-none" />
             {collapsed ? (
-              <div className="flex justify-center">
-                <span className="relative flex h-4 w-4 flex-shrink-0">
-                  <Radio className="h-full w-full text-green-600 flex-shrink-0 animate-pulse" />
+              <div className="flex justify-center relative z-10">
+                <span className="relative flex h-5 w-5 flex-shrink-0">
+                  <Radio className="h-full w-full text-white flex-shrink-0 animate-pulse drop-shadow-sm" />
                 </span>
               </div>
             ) : (
-              <>
+              <div className="relative z-10">
                 <div className="flex items-center gap-2">
-                  <Radio className="h-4 w-4 text-green-600 flex-shrink-0 animate-pulse" />
-                  <span className="text-xs font-medium text-green-600">Tocando</span>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite] absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest">Tocando Agora</span>
                 </div>
-                <p className="text-xs text-slate-700 mt-1 truncate">{playingLabel}</p>
-                <p className="text-xs text-slate-500 truncate">{scheduleLabel}</p>
-              </>
+                <p className="text-sm font-bold text-white mt-1.5 truncate drop-shadow-sm leading-tight">{playingLabel}</p>
+                <div className="mt-0.5">
+                  <p className="text-[10px] font-semibold text-emerald-100 truncate bg-black/10 inline-block px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/10 uppercase tracking-wider">{scheduleLabel}</p>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -194,8 +203,8 @@ export function Layout() {
         <button
           onClick={() => navigate("/about")}
           className={cn(
-            "py-3 border-t border-slate-100 flex items-center transition-all duration-200 w-full hover:bg-slate-50",
-            collapsed ? "justify-center px-2" : "justify-between px-4",
+            "py-3 border-t border-slate-100 flex items-center transition-all duration-300 w-full hover:bg-slate-50",
+            collapsed ? "justify-center px-2" : "justify-between px-5",
           )}
           title={
             collapsed
@@ -205,22 +214,22 @@ export function Layout() {
         >
           {collapsed ? (
             <span className={cn(
-              "text-[10px] font-semibold leading-none",
-              hasUpdate ? "text-green-600" : "text-slate-500",
+              "text-[10px] font-bold leading-none",
+              hasUpdate ? "text-emerald-500" : "text-slate-500",
             )}>
               {version ? `v${version}` : "v--"}
             </span>
           ) : (
             <>
               <span className={cn(
-                "text-xs",
-                hasUpdate ? "text-green-600 font-medium" : "text-slate-400",
+                "text-xs font-semibold",
+                hasUpdate ? "text-emerald-500 drop-shadow-sm" : "text-slate-400",
               )}>
                 {version ? `v${version}` : ""}
                 {hasUpdate && ` · v${updateVersion} disponível`}
               </span>
               <div
-                className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", hasUpdate ? "bg-green-500 animate-pulse" : "bg-green-500")}
+                className={cn("h-2 w-2 rounded-full flex-shrink-0 shadow-sm", hasUpdate ? "bg-emerald-500 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" : "bg-emerald-400 opacity-80")}
                 title={hasUpdate ? `v${updateVersion} disponível` : "Online"}
               />
             </>

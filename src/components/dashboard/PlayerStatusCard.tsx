@@ -35,13 +35,16 @@ export function PlayerStatusCard() {
 
   if (!isActive) {
     return (
-      <Card className="border-dashed border-2 border-slate-200 bg-slate-50">
-        <CardContent className="p-6 flex flex-col items-center justify-center min-h-[172px] text-center gap-2">
-          <div className="h-11 w-11 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+      <Card className="border-dashed border-2 border-slate-200 bg-slate-50 shadow-sm relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-transparent opacity-50 pointer-events-none" />
+        <CardContent className="p-6 flex flex-col items-center justify-center min-h-[172px] text-center gap-3 relative z-10 transition-transform group-hover:scale-[1.02] duration-300 ease-out">
+          <div className="h-12 w-12 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center">
             <Radio className="h-5 w-5 text-slate-400" />
           </div>
-          <p className="text-sm font-medium text-slate-600">Sinal Agendado</p>
-          <p className="text-xs text-slate-400">Nenhum sinal tocando no momento</p>
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Sinal Agendado</p>
+            <p className="text-xs text-slate-400 mt-0.5">Nenhum sinal tocando no momento</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -51,64 +54,66 @@ export function PlayerStatusCard() {
   const scheduleName = current_schedule?.name?.trim() || current_schedule?.time || "";
 
   return (
-    <Card className="border-l-4 border-l-green-500 shadow-sm">
-      <CardContent className="p-5">
+    <Card className="relative overflow-hidden text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border bg-gradient-to-br from-emerald-500 via-teal-500 to-teal-600 border-emerald-400/50 shadow-lg shadow-emerald-500/20">
+      <div className="absolute -top-24 -right-24 w-48 h-48 bg-white opacity-10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl pointer-events-none" />
+
+      <CardContent className="p-5 relative z-10 h-full flex flex-col justify-between min-h-[172px]">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              <span className="animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite] absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
             </span>
-            <span className="text-xs text-slate-500 uppercase tracking-widest font-medium">Sinal Agendado</span>
+            <span className="text-xs text-emerald-100 uppercase tracking-widest font-bold">Sinal Agendado</span>
           </div>
-          <span className="text-xs font-semibold text-green-700 bg-green-100 rounded-full px-2.5 py-0.5">
+          <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider bg-white rounded-full px-2 py-0.5 shadow-sm">
             {statusLabel}
           </span>
         </div>
 
         {/* File info */}
         <div className="mb-4">
-          <p className="font-semibold text-slate-800 truncate">{current_file?.name}</p>
-          {scheduleName && (
-            <p className="text-xs text-slate-400 mt-0.5 truncate">{scheduleName}</p>
-          )}
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md shadow-inner border border-white/20 flex items-center justify-center flex-shrink-0">
+              <Music2 className="h-5 w-5 text-white drop-shadow-sm" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-lg text-white truncate drop-shadow-sm leading-tight">{current_file?.name}</p>
+              {scheduleName && (
+                <p className="text-xs text-emerald-100 mt-1 truncate font-medium bg-black/10 inline-block px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/10">{scheduleName}</p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Progress */}
-        <div className="space-y-1.5">
-          <input
-            type="range"
-            min={0}
-            max={duration > 0 ? duration : 100}
-            value={displayPos}
-            onChange={(e) => setDragValue(Number(e.target.value))}
-            onMouseUp={(e) => { handleSeek(Number((e.target as HTMLInputElement).value)); setDragValue(null); }}
-            onTouchEnd={(e) => { handleSeek(Number((e.target as HTMLInputElement).value)); setDragValue(null); }}
-            disabled={duration === 0}
-            className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer disabled:cursor-default
-              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5
-              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-green-500 [&::-webkit-slider-thumb]:cursor-pointer
-              [&::-webkit-slider-thumb]:shadow
-              [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full
-              [&::-moz-range-thumb]:bg-green-500 [&::-moz-range-thumb]:border-0"
-            style={{ background: `linear-gradient(to right, #22c55e ${pct}%, #e2e8f0 ${pct}%)` }}
-          />
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <div className="flex items-center gap-1.5">
+        <div className="space-y-2 mt-auto">
+          <div className="relative h-2 w-full bg-black/20 rounded-full overflow-hidden backdrop-blur-sm shadow-inner cursor-pointer" 
+            onClick={(e) => {
+              if (duration === 0) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const p = (e.clientX - rect.left) / rect.width;
+              handleSeek(p * duration);
+            }}>
+            <div className="absolute top-0 left-0 h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] rounded-full transition-all duration-200" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs text-emerald-100 font-medium">
+            <div className="flex items-center gap-1.5 bg-white/10 px-2 py-0.5 rounded-md backdrop-blur-sm drop-shadow-sm">
               <Volume2 className="h-3.5 w-3.5" />
               <span>{Math.round(volume * 100)}%</span>
             </div>
-            <span className="font-mono tabular-nums">
+            <span className="font-mono tabular-nums bg-white/10 px-2 py-0.5 rounded-md backdrop-blur-sm drop-shadow-sm">
               {formatDuration(displayPos)}{duration > 0 && ` / ${formatDuration(duration)}`}
             </span>
           </div>
         </div>
 
         {/* Stop */}
-        <Button variant="outline" size="sm" className="mt-4 w-full text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300" onClick={handleStop}>
+        <Button variant="ghost" size="sm" className="mt-4 w-full text-white bg-white/10 hover:bg-white/20 hover:text-white border border-white/20 backdrop-blur-md shadow-sm transition-all" onClick={handleStop}>
           <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-          Parar
+          Parar Reprodução
         </Button>
       </CardContent>
     </Card>
