@@ -44,7 +44,7 @@ pub struct AppSettings {
     #[serde(default = "default_true")]
     pub mini_player_enabled: bool,
     /// Instala atualizações automaticamente ao iniciar o app, sem exibir dialog
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub auto_update: bool,
 }
 
@@ -66,7 +66,7 @@ impl Default for AppSettings {
             kiosk_mode: false,
             kiosk_start: false,
             mini_player_enabled: true,
-            auto_update: true,
+            auto_update: false,
         }
     }
 }

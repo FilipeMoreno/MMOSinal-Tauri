@@ -103,7 +103,7 @@ export function Settings() {
     kiosk_mode: false,
     kiosk_start: false,
     mini_player_enabled: true,
-    auto_update: true,
+    auto_update: false,
   });
   const [savedKiosk, setSavedKiosk] = useState(false);
   const [syncing, setSyncing] = useState(false);
