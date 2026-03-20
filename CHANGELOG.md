@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [1.3.6] - 2026-03-20
+
+### Corrigido
+- **Badge de atualização na sidebar e rodapé** — após o redesign, o indicador de nova versão havia parado de aparecer. Corrigido centralizando o `useUpdater` exclusivamente no `Layout.tsx` (fonte única de verdade); a instância duplicada em `App.tsx` foi removida.
+- **Padrão de atualização automática alterado para desativado** — o comportamento padrão ao encontrar uma atualização é agora exibir o dialog de confirmação, em vez de instalar silenciosamente. A atualização silenciosa pode ser ativada em Configurações > Sistema.
+
+---
+
 ## [1.3.5] - 2026-03-20
 
 ### Adicionado
