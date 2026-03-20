@@ -4,6 +4,7 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { useUpdater } from "@/hooks/useUpdater";
 import { usePlayerNotification } from "@/hooks/usePlayerNotification";
 import { settingsService } from "@/services/backupService";
+import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import {
   LayoutDashboard, Clock, Music2, CalendarOff, FileText, Settings, Radio,
   ChevronLeft, ChevronRight, BookOpen,
@@ -80,6 +81,7 @@ export function Layout() {
     hasUpdate, updateVersion,
   } = useUpdater();
   const [version, setVersion] = useState("");
+  const [whatsNewVersion, setWhatsNewVersion] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebar-collapsed") === "true"
   );
@@ -92,7 +94,14 @@ export function Layout() {
   }, []);
 
   useEffect(() => {
-    import("@tauri-apps/api/app").then(({ getVersion }) => getVersion().then(setVersion));
+    import("@tauri-apps/api/app").then(({ getVersion }) => getVersion().then((v) => {
+      setVersion(v);
+      const lastSeen = localStorage.getItem("last_seen_version");
+      if (lastSeen && lastSeen !== v) {
+        setWhatsNewVersion(v);
+      }
+      localStorage.setItem("last_seen_version", v);
+    }));
     settingsService.get().then((s) => {
       if (s.auto_update) {
         checkAndAutoInstall();
@@ -119,6 +128,9 @@ export function Layout() {
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
       {updateDialog}
+      {whatsNewVersion && (
+        <WhatsNewDialog version={whatsNewVersion} onClose={() => setWhatsNewVersion(null)} />
+      )}
 
       {/* Sidebar */}
       <aside
